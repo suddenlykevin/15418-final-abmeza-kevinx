@@ -19,8 +19,8 @@ The general algorithm used will be the following, as proposed by Gerstner et al.
    - associate superpixels to colors in the palette
    - refine colors in the palette
    - if (palette converged)
- 	- reduce temperature T = α T
- 	- expand palette
+     - reduce temperature T = α T
+     - expand palette
  - post-process
 
 Below is a visualization of the process, which involves setting up the image, and then afterwards a repetition of (c) assigning pixels to “super pixels”, which are associated with the pixels in our new image, and (d) assigning superpixels to the colors in our palette.
