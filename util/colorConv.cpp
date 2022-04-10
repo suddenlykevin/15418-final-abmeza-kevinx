@@ -14,7 +14,7 @@ float linearize(int V) {
 }
 
 float RGBtoX(float R, float G, float B) {
-    return labXr_32f * R + labXg_32f * G + labZb_32f * B;
+    return labXr_32f * R + labXg_32f * G + labXb_32f * B;
 }
 
 float RGBtoY(float R, float G, float B) {
@@ -73,6 +73,8 @@ void rgb2lab(int R, int G, int B, float *L, float *a, float *b) {
     float X = RGBtoX(Rf, Gf, Bf) * labXScale_32f;
     float Y = RGBtoY(Rf, Gf, Bf) * labYScale_32f;
     float Z = RGBtoZ(Rf, Gf, Bf) * labZScale_32f;
+
+    printf("X: %f Y: %f Z: %f \n",X,Y,Z);
 
     *L = XYZtoL(X, Y, Z);
     *a = XYZtoA(X, Y, Z);

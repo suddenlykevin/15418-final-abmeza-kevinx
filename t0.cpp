@@ -60,17 +60,10 @@ int main(void) {
 
     float L, a, b;
 
+    printf("_225_,_225_ ,_0_)\n");
     rgb2lab(255, 255, 0, &L, &a, &b);
     printf("(%f, %f, %f)\n", L, a, b);
-    
-    rgb2lab(127, 2, 212, &L, &a, &b);
-    printf("(%f, %f, %f)\n", L, a, b);
-
-    rgb2lab(8, 25, 60, &L, &a, &b);
-    printf("(%f, %f, %f)\n", L, a, b);
-
-    rgb2lab(5, 100, 215, &L, &a, &b);
-    printf("(%f, %f, %f)\n", L, a, b);
+    printf("\n");
 
     // Passed in the correct number of channels, in this case the number desired
     stbi_write_jpg("SonicFlower_output.jpeg", width, height, channels, img, 100);
