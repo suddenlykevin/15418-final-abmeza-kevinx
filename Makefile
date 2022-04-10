@@ -1,16 +1,13 @@
 APP_NAME=t0
 
-CXX=g++ -m64 -std=c++11
-CXXFLAGS= -I. -O3  -Wall -pedantic -fopenmp -Wno-unknown-pragmas
+CXX=g++
+CXXFLAGS= -Wall -pedantic -lm
 
-OBJS =  t0.o util/colorConv.o
-
-%.o: %.cpp
-	$(CXX) $< $(CXXFLAGS) -c -o $@
+SRC =  t0.cpp util/colorConv.cpp
 
 # Compilation Commands
-$(APP_NAME): $(OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $(OBJS)
+$(APP_NAME): $(SRC)
+	$(CXX) $(SRC) $(CXXFLAGS) -o $@
 
 clean:
 	/bin/rm -rf *~ *.o $(APP_NAME) *.class

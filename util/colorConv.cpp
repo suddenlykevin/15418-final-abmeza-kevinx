@@ -14,7 +14,7 @@ float linearize(int V) {
 }
 
 unsigned char delin(float V) {
-    V = V/100;
+    V = V / 100.f;
     float Vf;
     if (V > rgbTinv_32f) {
         Vf = rgbInvScale_32f * pow(V, rgbLPowInv_32f) - rgbLShift_32f;
@@ -131,8 +131,6 @@ void rgb2lab(int R, int G, int B, float *L, float *a, float *b) {
     X *= labXScale_32f;
     Y *= labYScale_32f;
     Z *= labZScale_32f;
-
-    printf("X: %f Y: %f Z: %f \n",X,Y,Z);
 
     *L = XYZtoL(X, Y, Z);
     *a = XYZtoA(X, Y, Z);
