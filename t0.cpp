@@ -40,7 +40,7 @@ int main(void) {
     
     ///*** Conversion to Grey image ***///
     size_t img_size = width * height * channels;
-    int gray_channels = channels == 4 ? 2 : 1;
+    int gray_channels = channels;
     size_t gray_img_size = width * height * gray_channels;
 
     // Allocate image for grey
@@ -52,25 +52,32 @@ int main(void) {
  
     // Loop through pixels to make them grey scale
     for(unsigned char *p = img, *pg = gray_img; p != img + img_size; p += channels, pg += gray_channels) {
-        *pg = (uint8_t)((*p + *(p + 1) + *(p + 2))/3.0);
+        float L, a, b;
+        rgb2lab(*p, *(p + 1), *(p + 2), &L, &a, &b);
+        lab2rgb(L, a, b, pg, pg + 1, pg + 2);
         if(channels == 4) {
             *(pg + 1) = *(p + 3);
         }
     }
 
     float L, a, b;
+    unsigned char R, G, B;
 
     rgb2lab(255, 255, 0, &L, &a, &b);
-    printf("(%f, %f, %f)\n", L, a, b);
+    lab2rgb(L, a, b, &R, &G, &B);
+    printf("(%d, %d, %d)\n", R, G, B);
     
     rgb2lab(127, 2, 212, &L, &a, &b);
-    printf("(%f, %f, %f)\n", L, a, b);
+    lab2rgb(L, a, b, &R, &G, &B);
+    printf("(%d, %d, %d)\n", R, G, B);
 
     rgb2lab(8, 25, 60, &L, &a, &b);
-    printf("(%f, %f, %f)\n", L, a, b);
+    lab2rgb(L, a, b, &R, &G, &B);
+    printf("(%d, %d, %d)\n", R, G, B);
 
     rgb2lab(5, 100, 215, &L, &a, &b);
-    printf("(%f, %f, %f)\n", L, a, b);
+    lab2rgb(L, a, b, &R, &G, &B);
+    printf("(%d, %d, %d)\n", R, G, B);
 
     // Passed in the correct number of channels, in this case the number desired
     stbi_write_jpg("SonicFlower_output.jpeg", width, height, channels, img, 100);
