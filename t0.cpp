@@ -15,7 +15,7 @@
  * 
  */
 
-#include "colorConv.h"
+#include "util/colorConv.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -61,6 +61,15 @@ int main(void) {
     float L, a, b;
 
     rgb2lab(255, 255, 0, &L, &a, &b);
+    printf("(%f, %f, %f)\n", L, a, b);
+    
+    rgb2lab(127, 2, 212, &L, &a, &b);
+    printf("(%f, %f, %f)\n", L, a, b);
+
+    rgb2lab(8, 25, 60, &L, &a, &b);
+    printf("(%f, %f, %f)\n", L, a, b);
+
+    rgb2lab(5, 100, 215, &L, &a, &b);
     printf("(%f, %f, %f)\n", L, a, b);
 
     // Passed in the correct number of channels, in this case the number desired
