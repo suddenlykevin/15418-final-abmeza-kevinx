@@ -15,9 +15,7 @@
  * 
  */
 
-
-
-
+#include "colorConv.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -25,7 +23,7 @@
 #include "stb_image/stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image/stb_image_write.h"
- 
+
 int main(void) {
     
     /// Variables for image processing
@@ -60,6 +58,10 @@ int main(void) {
         }
     }
 
+    float L, a, b;
+
+    rgb2lab(255, 255, 0, &L, &a, &b);
+    printf("(%f, %f, %f)\n", L, a, b);
 
     // Passed in the correct number of channels, in this case the number desired
     stbi_write_jpg("SonicFlower_output.jpeg", width, height, channels, img, 100);
