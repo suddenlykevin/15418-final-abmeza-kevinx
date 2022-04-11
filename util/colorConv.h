@@ -30,26 +30,32 @@
 #define  labBy_32f  (-0.2040259f) /* = xyzZg_32f */
 #define  labBz_32f  1.0572252f /* = xyzZb_32 */
 
-#define  labT_32f   0.008856f
-
 /* https://en.wikipedia.org/wiki/CIELAB_color_space#From_CIEXYZ_to_CIELAB */
-#define labXScale_32f 0.01052090029f /* 1/95.0489 (D65 illuminant) */
-#define labYScale_32f .01f
-#define labZScale_32f 0.009184085816f /* 1/108.8840 (D65 illuminant) */
 
-#define labXScaleInv_32f 95.0489f
+
+// Scaling factors (X_n, Y_n, Z_n)
+#define labXScaleInv_32f 95.0489f     
 #define labYScaleInv_32f 100.f
 #define labZScaleInv_32f 108.8840f
+#define labXScale_32f 0.0105209002945f //< 1/95.0489 (D65 illuminant)
+#define labYScale_32f .01f             //< 1/100 (D65 illuminant)
+#define labZScale_32f 0.0091840858161f //< 1/108.8840 (D65 illuminant)
 
-#define labAScale_32f 0.002f
-#define labBScale_32f 0.005f
-#define labPow_32f 3.f
+// Power of 3 value
+#define labPow_32f 3.f       
 
-#define labSmallScale_32f  7.787f
-#define labSmallShift_32f  0.13793103448275862f  /* 16/116 */
-#define labLScale_32f      116.f
-#define labLShift_32f      16.f
-#define labLScale2_32f     903.3f
+// Constants used to scale Laab or XYZ values
+#define labLScale_32f 116.f
+#define labLShift_32f 16.f
+#define labAScale_32f 0.002f     // < 1/200
+#define labBScale_32f 0.005f      // < 1/500
+
+// constants used in f function
+#define lab_delta_32f         0.2068965517f   //< Delta 
+#define lab_delta3_32f        0.0088564516f   //< Delta cubed
+#define labSmallScale_32f     7.787f          //< 1 / (3*delta^2)
+#define labSmallShift_32f     0.137931034483f //< 4/29 
+#define labSmallScaleInv_32f  0.1284185493f   //< 3*delta^2
 
 #define rgbT_32f 0.04045f
 #define rgbScale_32f 0.0773993808f /* 1/12.92 */
