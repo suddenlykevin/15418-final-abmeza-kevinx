@@ -9,26 +9,26 @@
 #define  labXg_32f  0.3575761f /* = xyzXg_32f */
 #define  labXb_32f  0.1804375f /* = xyzXb_32f */
 
-#define  labYr_32f  0.212671f /* = xyzYr_32f */
-#define  labYg_32f  0.715160f /* = xyzYg_32f */ 
-#define  labYb_32f  0.072169f /* = xyzYb_32f */ 
+#define  labYr_32f  0.2126729f /* = xyzYr_32f */
+#define  labYg_32f  0.7151522f /* = xyzYg_32f */ 
+#define  labYb_32f  0.0721750f /* = xyzYb_32f */ 
 
 #define  labZr_32f  0.0193339f /* = xyzZr_32f */
 #define  labZg_32f  0.1191920f /* = xyzZg_32f */
 #define  labZb_32f  0.9503041f /* = xyzZb_32 */
 
 /** http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html */
-#define  labRx_32f  3.2404542f /* = xyzXr_32f */
+#define  labRx_32f    3.2404542f /* = xyzXr_32f */
 #define  labRy_32f  (-1.5371385f) /* = xyzXg_32f */
-#define  labRz_32f  (-0.49853214f) /* = xyzXb_32f */
+#define  labRz_32f  (-0.4985314f) /* = xyzXb_32f */
 
 #define  labGx_32f  (-0.9692660f) /* = xyzYr_32f */
-#define  labGy_32f  1.8760108f /* = xyzYg_32f */ 
-#define  labGz_32f  0.0415560f /* = xyzYb_32f */ 
+#define  labGy_32f    1.8760108f /* = xyzYg_32f */ 
+#define  labGz_32f    0.0415560f /* = xyzYb_32f */ 
 
-#define  labBx_32f  0.0556434f /* = xyzZr_32f */
+#define  labBx_32f    0.0556434f /* = xyzZr_32f */
 #define  labBy_32f  (-0.2040259f) /* = xyzZg_32f */
-#define  labBz_32f  1.0572252f /* = xyzZb_32 */
+#define  labBz_32f    1.0572252f /* = xyzZb_32 */
 
 /* https://en.wikipedia.org/wiki/CIELAB_color_space#From_CIEXYZ_to_CIELAB */
 
@@ -47,8 +47,8 @@
 // Constants used to scale Laab or XYZ values
 #define labLScale_32f 116.f
 #define labLShift_32f 16.f
-#define labAScale_32f 0.002f     // < 1/200
-#define labBScale_32f 0.005f      // < 1/500
+#define labAScale_32f 0.002f     // < 1/500
+#define labBScale_32f 0.005f     // < 1/200
 
 // constants used in f function
 #define lab_delta_32f         0.2068965517f   //< Delta 

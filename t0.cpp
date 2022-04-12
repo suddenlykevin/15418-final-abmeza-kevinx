@@ -29,7 +29,7 @@
 int in_range(unsigned char* p1, unsigned char* p2){
     float value = ( ((float)*p1) - ((float) *p2));
     
-    if (abs(value) > 0){
+    if (abs(value) > 2){
         return 1;
     }
     return 0;
@@ -96,14 +96,25 @@ int main(void) {
     
     int width, height, channels;
 
+    float L, a, b;
+    unsigned char R, G, B;
+
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
-    /*
+    
     image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
-    return 0;
-    */
+    
+    printf("\n\n _My test Cases_ \n\n");
+    rgb2lab(228, 243, 255, &L, &a, &b);
+    lab2rgb(L, a, b, &R, &G, &B);
+    printf("(%d, %d, %d)\n\n", R, G, B);
+
+    rgb2lab(47, 95, 159, &L, &a, &b);
+    lab2rgb(L, a, b, &R, &G, &B);
+    printf("(%d, %d, %d)\n\n", R, G, B);
+  
+    
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
-
-
+ 
     /// Load the image into img
     unsigned char *img = stbi_load("SonicFlower.jpeg", &width, &height, &channels, 0);
     if(img == NULL) {
@@ -134,40 +145,32 @@ int main(void) {
         }
     }
 
-    float L, a, b;
-    unsigned char R, G, B;
+    //float L, a, b;
+    //unsigned char R, G, B;
     printf("\n\n _My test Cases_ \n\n");
     rgb2lab(255, 255, 0, &L, &a, &b);
     lab2rgb(L, a, b, &R, &G, &B);
     printf("(%d, %d, %d)\n\n", R, G, B);
-
-    rgb2lab(127, 2, 212, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
-
-    rgb2lab(8, 25, 60, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
-
-    rgb2lab(5, 100, 215, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
     
-    rgb2lab(10, 0, 0, &L, &a, &b);
+    rgb2lab(228, 243, 255, &L, &a, &b);
     lab2rgb(L, a, b, &R, &G, &B);
     printf("(%d, %d, %d)\n\n", R, G, B);
 
-    rgb2lab(0, 8, 13, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
-
-    rgb2lab(30, 18, 18, &L, &a, &b);
+    rgb2lab(47, 95, 159, &L, &a, &b);
     lab2rgb(L, a, b, &R, &G, &B);
     printf("(%d, %d, %d)\n\n", R, G, B);
 
     // Passed in the correct number of channels, in this case the number desired
     stbi_write_jpg("SonicFlower_output.jpeg", width, height, channels, img, 100);
     stbi_write_jpg("SonicFlower_gray.jpeg", width, height, gray_channels, gray_img, 100);
+
+    
+
+    /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
+    
+    image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
+    
+    /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
  
     stbi_image_free(img);
     free(gray_img);

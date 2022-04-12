@@ -22,7 +22,7 @@ unsigned char delin(float V) {
         Vf = rgbSmallScale_32f * V; 
     }
     //Vf = (Vf < 0) ? 0 : Vf;
-    return (unsigned char) (Vf * 255.f);
+    return (unsigned char) roundf(Vf * 255.f);
 }
 
 float RGBtoX(float R, float G, float B) {
