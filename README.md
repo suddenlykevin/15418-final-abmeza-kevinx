@@ -69,10 +69,54 @@ In addition to the original paper, Gerstner et al.’s paper heavily cites [Acha
 # Platform Choice
 We have chosen to use C++, leveraging CUDA on the RTX 2080 GPUs of the **GHC machines**. Because the GHC machine’s GPU has the most CUDA cores of Carnegie Mellon’s local resources, we think it would be the best way to develop and test our implementation. We would also like to eventually test our implementation on the **Bridges-2 supercomputer** to test how performance scales with CUDA cores available.
 
-# Schedule
+# Planned Schedule
 
-**Week 1** - Read papers, scout resources online, and begin writing sequential implementation.
-**Week 2** - Complete sequential implementation and focus on parallelizing superpixel segmentation.
-**Week 3** - Complete superpixel segmentation, begin to parallelize palette refinement and image render.
-**Week 4** - Complete parallelization, test on Bridges-2 and begin writing the final report.
-**Week 5** - Complete and submit the final report, prepare for the presentation.
+**Week 1** - Read papers, scout resources online, and begin writing sequential implementation.<br>
+- [x] Read papers
+- [x] Scout resources
+
+**Week 2** - Complete sequential implementation and focus on parallelizing superpixel segmentation.<br>
+- [x] Week 1 overflow: Begin writing sequential implementation
+- [ ] Complete sequential implementation
+- [ ] Focus on parallelizing superpixel implementation
+
+**Week 3** - Complete superpixel segmentation, begin to parallelize palette refinement and image render.<br>
+- [ ] Complete superpixel parallelization
+- [ ] Begin to parallelize palette refinement and image render
+
+**Week 4** - Complete parallelization, test on Bridges-2 and begin writing the final report.<br>
+- [ ] Complete parallelization
+- [ ] Test on bridges-2
+- [ ] Begin final report
+
+**Week 5** - Complete and submit the final report, prepare for the presentation.<br>
+- [ ] Complete and submit final report
+- [ ] Prepare presentation
+
+# Milestone Report
+In our planned schedule, we stated that by the second week, we should have completed our sequential implementation and begun some preliminary experimentation with parallelization. Unfortunately, it seems we were a little bit too optimistic about our comprehension of the underlying algorithm of pixelation image abstraction. As a result, we decided to spend the first week focused on better understanding the algorithms cited in the Gerstner paper. From this, we gained a better understanding of SPIC superpixel segmentation and MCDA. It is clear that the main source of complexity for our project, as well as the dimensions of parallelization, will come from the multiple stages that are involved with the algorithm we are trying to build. 
+
+With respect to our goals and deliverables, we are currently a little behind schedule, since we are still trying to finish the sequential implementation of our project. It has proven to be a little more challenging since there are a lot of new concepts and formulas that we have been forced to analyze in order to figure out exactly how to proceed. We do not think we will be able to accomplish our stretch goals, but we remain confident that we should still be able to achieve our minimum deliverables at the end of our project. Since we have been able to develop a solid understanding of our algorithm, progress from here should be manageable.
+
+Our focus at the moment is managing the rounding of values which has been an issue that we have been dealing with when converting between color spaces. This is especially important since color data in our algorithm requires a decent level of precision. We have also been looking into taking advantage of image libraries to speed up the prototyping process for the sequential implementation. This is, of course, a minor speed bump as we dive into implementing the full algorithm.
+
+## Updated Schedule
+**Week 3**<br>
+- [ ] Complete sequential implementation
+- [ ] Parallelize simple tasks (colorspace conversion, image read/render)
+- [ ] Think about superpixel parallelization
+
+**Week 4**<br>
+- [ ] Benchmark sequential implementation (Bridges-2)
+- [ ] Parallelize superpixel segmentation
+- [ ] Begin parallelizing palette refinement and laplacian smoothing
+- [ ] Begin final report
+
+**Week 5**<br>
+- [ ] Complete parallelization
+- [ ] Benchmark parallel implementation (Bridges-2)
+- [ ] Complete and submit final report
+- [ ] Prepare presentation
+
+## Poster session
+At our poster session we plan on being able to show a demo of our working project running both sequentially and in parallel to demonstrate the speedup we were able to achieve, and in the process demonstrate what our code is able to accomplish. In addition to this, we will hopefully be able to show some diagrams with statistics of the speed up across a different number of processors. 
