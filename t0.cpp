@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <algorithm> 
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image/stb_image.h"
@@ -38,6 +39,14 @@ int in_range(unsigned char* p1, unsigned char* p2){
         return 1;
     }
     return 0;
+}
+
+float dist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
+           float l_i, float a_i, float b_i, int x_i, int y_i) {
+    float d_lab = sqrt(pow(l_k - l_i, 2.f) + pow(a_k - a_i, 2.f) + pow(b_k - b_i, 2.f));
+    float d_xy = sqrt(pow((float) x_k - x_i, 2.f) + pow((float) y_k - y_i, 2.f));
+    float k = ((float) m) / S;
+    return d_lab + k * d_xy;
 }
 
 //DEBUG: FUNCTION USED TO FIND WHAT PIXELS ARE DIFFRENT BETWEEN TWO IMAGES
@@ -103,13 +112,14 @@ int main(void) {
 
     int out_width = 16;
     int out_height = 16;
+    int m_gerstner = 45;
 
     float L, a, b;
     unsigned char R, G, B;
 
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
     
-    image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
+    // image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
     
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
  
@@ -123,6 +133,7 @@ int main(void) {
     
     ///*** Set up superpixel data structures ***///
     size_t img_size = width * height * channels;
+    unsigned char *out_img = (unsigned char *) malloc(img_size);
     size_t out_img_size = out_width * out_height * channels;
     FloatVec *superpixel_pos = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec));
     int *superpixel_img = (int *) calloc(width * height, sizeof(int));
@@ -136,7 +147,9 @@ int main(void) {
         for (int i = 0; i < out_width; ++i) {
             float x = (i + 0.5f) * width / out_width;
             float y = (j + 0.5f) * height / out_height;
-            superpixel_pos[out_width * j + i] = {x, y};
+            FloatVec pos = {x, y};
+            superpixel_pos[out_width * j + i] = pos;
+            printf("superpixel %d: (%f, %f)\n", out_width * j + i, x, y);
         }
     }
 
@@ -165,15 +178,77 @@ int main(void) {
         rgb2lab(*p, *(p + 1), *(p + 2), pl, pl + 1, pl + 2);
     }
 
+    float S = sqrt(((float) (width * height))/((float) (out_width * out_height)));
+    
+    // update superpixel segments
+    for (int iter = 0; iter < 10; ++iter) {
+        for (int j = 0; j < out_height; ++j) {
+            for (int i = 0; i < out_width; ++i) {
+                
+                // get local region
+                FloatVec center = superpixel_pos[out_width * j + i];
+                int min_x = std::max(0.0f, center.x - S);
+                int min_y = std::max(0.0f, center.y - S);
+                int max_x = std::min((float) (width - 1), center.x + S);
+                int max_y = std::min((float) (height - 1), center.y + S);            
+                printf("superpixel %d: (%d, %d) -> (%d, %d)\n", out_width * j + i, min_x, min_y, max_x, max_y);
+                int x = (int) round(center.x);
+                int y = (int) round(center.y);
+                int idx = y*width + x;
+                
+                // within region
+                for (int yy = min_y; yy <= max_y; ++yy) {
+                    for (int xx = min_x; xx <= max_x; ++xx) {
+                        int curr_idx = yy * width + xx;
+                        int curr_spidx = superpixel_img[curr_idx];
+                        FloatVec curr_spixel = superpixel_pos[curr_spidx];
+                        int curr_spx = (int) round(curr_spixel.x);
+                        int curr_spy = (int) round(curr_spixel.y);
+                        curr_spidx = curr_spy * width + curr_spx;
+                        float dist_curr = dist_k(m_gerstner, S, lab_image[curr_spidx*channels], 
+                                                lab_image[curr_spidx*channels + 1], lab_image[curr_spidx*channels + 2], 
+                                                curr_spx, curr_spy, lab_image[curr_idx*channels], lab_image[curr_idx*channels + 1], 
+                                                lab_image[curr_idx*channels + 2], xx, yy);
+                        float dist_new = dist_k(m_gerstner, S, lab_image[idx*channels], 
+                                                lab_image[idx*channels + 1], lab_image[idx*channels + 2], 
+                                                x, y, lab_image[curr_idx*channels], lab_image[curr_idx*channels + 1], 
+                                                lab_image[curr_idx*channels + 2], xx, yy);
+                        if (dist_new < dist_curr) {
+                            superpixel_img[curr_idx] = out_width*j + i;
+                        }
+                    }
+                }
+            }
+        }
+        
+    }
 
+    for (int j = 0; j < height; j++) {
+        for (int i = 0; i < width; i++) {
+            int idx = j*width + i;
+            if (superpixel_img[idx] < 85) {
+                out_img[idx*3] = superpixel_img[idx] * 3;
+                out_img[idx*3 + 1] = 0;
+                out_img[idx*3 + 2] = 0;
+            } else if (superpixel_img[idx] < 170) {
+                out_img[idx*3] = 0;
+                out_img[idx*3 + 1] = (superpixel_img[idx] - 85) * 3;
+                out_img[idx*3 + 2] = 0;
+            } else {
+                out_img[idx*3] = 0;
+                out_img[idx*3 + 1] = 0;
+                out_img[idx*3 + 2] = (superpixel_img[idx] - 170) * 3;
+            }
+        }
+    }
 
     // Passed in the correct number of channels, in this case the number desired
-    stbi_write_jpg("SonicFlower_output.jpeg", width, height, channels, img, 100);
+    stbi_write_jpg("SonicFlower_output.jpeg", width, height, channels, out_img, 100);
     
 
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
     
-    image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
+    // image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
     
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
  

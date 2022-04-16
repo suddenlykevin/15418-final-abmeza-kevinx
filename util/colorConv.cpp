@@ -121,55 +121,55 @@ float LABtoZ(float L, float a, float b) {
 }
 
 void rgb2lab(int R, int G, int B, float *L, float *a, float *b) {
-    printf("_RGB2LAB_\n");
-    printf("(R:%d,G:%d,B:%d)->",R,G,B);
+    // printf("_RGB2LAB_\n");
+    // printf("(R:%d,G:%d,B:%d)->",R,G,B);
     float Rf = linearize(R);
     float Gf = linearize(G);
     float Bf = linearize(B);
     
-    printf("(Rf:%f,Bf:%f,Gf:%f)->",Rf,Gf,Bf);
+    // printf("(Rf:%f,Bf:%f,Gf:%f)->",Rf,Gf,Bf);
 
     float X = RGBtoX(Rf, Gf, Bf);
     float Y = RGBtoY(Rf, Gf, Bf);
     float Z = RGBtoZ(Rf, Gf, Bf);
     
-    printf("(X:%f,Y:%f,Z:%f)->",X,Y,Z);
+    // printf("(X:%f,Y:%f,Z:%f)->",X,Y,Z);
 
     X *= labXScale_32f;
     Y *= labYScale_32f;
     Z *= labZScale_32f;
     
-    printf("(XS:%f,YS:%f,ZS:%f)->",X,Y,Z);
+    // printf("(XS:%f,YS:%f,ZS:%f)->",X,Y,Z);
 
     *L = XYZtoL(X, Y, Z);
     *a = XYZtoA(X, Y, Z);
     *b = XYZtoB(X, Y, Z);
     
-    printf("(L:%f,a:%f,b:%f)\n",*L,*a,*b);
+    // printf("(L:%f,a:%f,b:%f)\n",*L,*a,*b);
 }
 
 void lab2rgb(float L, float a, float b, unsigned char *R, unsigned char *G, unsigned char *B) {
-    printf("_LAB2RGB_\n");
-    printf("(L:%f,a:%f,b:%f)->",L,a,b);
+    // printf("_LAB2RGB_\n");
+    // printf("(L:%f,a:%f,b:%f)->",L,a,b);
     float X = LABtoX(L, a, b);
     float Y = LABtoY(L, a, b);
     float Z = LABtoZ(L, a, b);
     
-    printf("(XS:%f,YS:%f,ZS:%f)->",X,Y,Z);
+    // printf("(XS:%f,YS:%f,ZS:%f)->",X,Y,Z);
     X *= labXScaleInv_32f;
     Y *= labYScaleInv_32f;
     Z *= labZScaleInv_32f;
 
-    printf("(X:%f,Y:%f,Z:%f)->",X,Y,Z);
+    // printf("(X:%f,Y:%f,Z:%f)->",X,Y,Z);
 
     float Rf = XYZtoR(X, Y, Z);
     float Gf = XYZtoG(X, Y, Z);
     float Bf = XYZtorgB(X, Y, Z);
 
-    printf("(Rf:%f,Bf:%f,Gf:%f)->",Rf,Gf,Bf);
+    // printf("(Rf:%f,Bf:%f,Gf:%f)->",Rf,Gf,Bf);
 
     *R = delin(Rf);
     *G = delin(Gf);
     *B = delin(Bf);
-    printf("(R:%d,G:%d,B:%d)",*R,*G,*B);
+    // printf("(R:%d,G:%d,B:%d)",*R,*G,*B);
 }
