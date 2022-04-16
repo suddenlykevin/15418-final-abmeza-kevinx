@@ -25,6 +25,11 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image/stb_image_write.h"
 
+typedef struct {
+    float x;
+    float y;
+} FloatVec;
+
 //DEBUG: FUNCTION USED TO CHECK DIFF BETWEEN PIXELS IN IMAGE
 int in_range(unsigned char* p1, unsigned char* p2){
     float value = ( ((float)*p1) - ((float) *p2));
@@ -96,22 +101,15 @@ int main(void) {
     
     int width, height, channels;
 
+    int out_width = 16;
+    int out_height = 16;
+
     float L, a, b;
     unsigned char R, G, B;
 
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
     
     image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
-    
-    printf("\n\n _My test Cases_ \n\n");
-    rgb2lab(228, 243, 255, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
-
-    rgb2lab(47, 95, 159, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
-  
     
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
  
@@ -123,47 +121,54 @@ int main(void) {
     }
     printf("Loaded image with a width of %dpx, a height of %dpx and %d channels\n", width, height, channels);
     
-    ///*** Conversion to Grey image ***///
+    ///*** Set up superpixel data structures ***///
     size_t img_size = width * height * channels;
-    int gray_channels = channels;
-    size_t gray_img_size = width * height * gray_channels;
-
-    // Allocate image for grey
-    unsigned char *gray_img = (unsigned char *) malloc(gray_img_size);
-    if(gray_img == NULL) {
-        printf("Unable to allocate memory for the gray image.\n");
+    size_t out_img_size = out_width * out_height * channels;
+    FloatVec *superpixel_pos = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec));
+    int *superpixel_img = (int *) calloc(width * height, sizeof(int));
+    if (superpixel_pos == NULL) {
+        printf("Unable to allocate memory for the cielab image.\n");
         exit(1);
     }
- 
-    // Loop through pixels to make them grey scale
-    for(unsigned char *p = img, *pg = gray_img; p != img + img_size; p += channels, pg += gray_channels) {
-        float L, a, b;
-        rgb2lab(*p, *(p + 1), *(p + 2), &L, &a, &b);
-        lab2rgb(L, a, b, pg, pg + 1, pg + 2);
-        if(channels == 4) {
-            *(pg + 1) = *(p + 3);
+
+    // initialize superpixel positions
+    for (int j = 0; j < out_height; ++j) {
+        for (int i = 0; i < out_width; ++i) {
+            float x = (i + 0.5f) * width / out_width;
+            float y = (j + 0.5f) * height / out_height;
+            superpixel_pos[out_width * j + i] = {x, y};
         }
     }
 
-    //float L, a, b;
-    //unsigned char R, G, B;
-    printf("\n\n _My test Cases_ \n\n");
-    rgb2lab(255, 255, 0, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
-    
-    rgb2lab(228, 243, 255, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
+    // initialize superpixel assignments
+    for (int j = 0; j < height; ++j) {
+        for (int i = 0; i < width; ++i) {
+            float dx = (float) width/(float) out_width;
+            float dy = (float) height/(float) out_height;
+            int x = (int) ((float) i / dx);
+            int y = (int) ((float) j / dy);
+            superpixel_img[width * j + i] = out_width * y + x;
+        }
+    }
 
-    rgb2lab(47, 95, 159, &L, &a, &b);
-    lab2rgb(L, a, b, &R, &G, &B);
-    printf("(%d, %d, %d)\n\n", R, G, B);
+    float *lab_image = (float *) calloc(img_size, sizeof(float));
+    if (lab_image == NULL) {
+        printf("Unable to allocate memory for the cielab image.\n");
+        exit(1);
+    }
+    
+    unsigned char *p;
+    float *pl;
+
+    // Loop through pixels to save them in lab space
+    for(p = img, pl = lab_image; p != img + img_size; p += channels, pl += channels) {
+        rgb2lab(*p, *(p + 1), *(p + 2), pl, pl + 1, pl + 2);
+    }
+
+
 
     // Passed in the correct number of channels, in this case the number desired
     stbi_write_jpg("SonicFlower_output.jpeg", width, height, channels, img, 100);
-    stbi_write_jpg("SonicFlower_gray.jpeg", width, height, gray_channels, gray_img, 100);
-
     
 
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
@@ -173,5 +178,4 @@ int main(void) {
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
  
     stbi_image_free(img);
-    free(gray_img);
 }
