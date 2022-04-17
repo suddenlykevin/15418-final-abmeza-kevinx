@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <algorithm> 
+#include <stack>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image/stb_image.h"
@@ -181,7 +182,9 @@ int main(void) {
     float S = sqrt(((float) (width * height))/((float) (out_width * out_height)));
     
     // update superpixel segments
-    for (int iter = 0; iter < 10; ++iter) {
+    for (int iter = 0; iter < 35; ++iter) {
+
+        // update boundaries
         for (int j = 0; j < out_height; ++j) {
             for (int i = 0; i < out_width; ++i) {
                 
@@ -191,7 +194,7 @@ int main(void) {
                 int min_y = std::max(0.0f, center.y - S);
                 int max_x = std::min((float) (width - 1), center.x + S);
                 int max_y = std::min((float) (height - 1), center.y + S);            
-                printf("superpixel %d: (%d, %d) -> (%d, %d)\n", out_width * j + i, min_x, min_y, max_x, max_y);
+                printf("iter %d superpixel %d: (%d, %d) -> (%d, %d)\n", iter, out_width * j + i, min_x, min_y, max_x, max_y);
                 int x = (int) round(center.x);
                 int y = (int) round(center.y);
                 int idx = y*width + x;
@@ -220,24 +223,48 @@ int main(void) {
                 }
             }
         }
+
+        // update positions
+        FloatVec *sp_sums = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec));
+        int *sp_count = (int *) calloc(out_width * out_height, sizeof(int));
+
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                int idx = j*width + i;
+                int spidx = superpixel_img[idx];
+                sp_count[spidx] ++;
+                sp_sums[spidx].x += i;
+                sp_sums[spidx].y += j;
+            }
+        }
+
+        for (int j = 0; j < out_height; j++) {
+            for (int i = 0; i < out_width; i++) {
+                int spidx = j*out_width + i;
+                float x = sp_sums[spidx].x / sp_count[spidx];
+                float y = sp_sums[spidx].y / sp_count[spidx];
+                FloatVec newpos = {x, y};
+                superpixel_pos[spidx] = newpos;
+            }
+        }
         
+        // update pallette
+
+        // smooth
     }
 
     for (int j = 0; j < height; j++) {
         for (int i = 0; i < width; i++) {
             int idx = j*width + i;
-            if (superpixel_img[idx] < 85) {
-                out_img[idx*3] = superpixel_img[idx] * 3;
-                out_img[idx*3 + 1] = 0;
-                out_img[idx*3 + 2] = 0;
-            } else if (superpixel_img[idx] < 170) {
+            if ((superpixel_img[idx]/out_width % 2 == 0 && superpixel_img[idx] % 2 == 0) ||
+                (superpixel_img[idx]/out_width % 2 == 1 && superpixel_img[idx] % 2 == 1)) {
                 out_img[idx*3] = 0;
-                out_img[idx*3 + 1] = (superpixel_img[idx] - 85) * 3;
+                out_img[idx*3 + 1] = 0;
                 out_img[idx*3 + 2] = 0;
             } else {
-                out_img[idx*3] = 0;
-                out_img[idx*3 + 1] = 0;
-                out_img[idx*3 + 2] = (superpixel_img[idx] - 170) * 3;
+                out_img[idx*3] = 255;
+                out_img[idx*3 + 1] = 255;
+                out_img[idx*3 + 2] = 255;
             }
         }
     }
