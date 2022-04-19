@@ -29,11 +29,15 @@
 #include "stb_image/stb_image_write.h"
 
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <algorithm> 
 #include <stack>
+
+
+#define getVariableName(x) #x
 
 
 /**
@@ -69,107 +73,180 @@ float dist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
     return d_lab + k * d_xy;
 }
 
+//*************************************************************//
+//**************** WRAPPER HELPER FUNCTIONS *******************//
+//*************************************************************//
 
-
-
-int main(void) {
-    
-    //*** ********* ***//
-    //*** VARIABLES ***//
-    //*** ********* ***//
-    
-    // Values of input image
-    int width, height, channels;
-    // Values of output image
-    int out_width = 16;
-    int out_height = 16;
-    // Some thingy TODO
-    int m_gerstner = 45;
- 
-    //*** ********** ***//
-    //*** LOAD IMAGE ***//
-    //*** ********** ***//
-
-    unsigned char *img = stbi_load("SonicFlower.jpeg", &width, &height, &channels, 0);
+/**
+ * @brief Checks to make sure no error occured in stbi_load
+ * 
+ * @param filename             name of file being used
+ * @param x_ptr                pointer of x parameter
+ * @param y_ptr                pointer of y parameter
+ * @param channels_in_file_ptr pointer to channels in file
+ * @param desired_channels     int to desired channels
+ * @return stbi_uc* the array of rgb values for image
+ */
+unsigned char* wrp_stbi_load(char const *filename, int *x_ptr, int *y_ptr, int *channels_in_file_ptr, int desired_channels){
+    unsigned char *img = stbi_load(filename, x_ptr, y_ptr, channels_in_file_ptr, desired_channels);
     if(img == NULL) {
-        printf("Error in loading the image\n");
+        printf("Error in loading the image with name %s\n",filename);
+        exit(1);
+    }
+    return img;
+}
+
+/**
+ * @brief wrapper for malloc to check for errors in allocation
+ * 
+ * @param size   size of item being allocated
+ * @return void* pointer to space allocated
+ */
+void* wrp_malloc(size_t size){ 
+    void* ptr = malloc(size);
+
+    // Check that no error occured
+    if (ptr == NULL) {
+        printf("Unable to allocate memory with malloc of size %d\n", size);
         exit(1);
     }
 
-    //********** DEGUB **********//
-    printf("Loaded image with a width of %dpx, a height of %dpx and %d channels\n", width, height, channels);
-    //********** DEGUB **********//
+    return ptr;
+}
+
+/**
+ * @brief wrapper for calloc to check for errors in allocation
+ * 
+ * @param nitems number of items to allocated
+ * @param size   size of item being allocated
+ * @return void* pointer to space allocated
+ */
+void* wrp_calloc(size_t nitems, size_t size){ 
+    void* ptr = calloc(nitems, size);
+
+    // Check that no error occured
+    if (ptr == NULL) {
+        printf("Unable to allocate memory with calloc of items %d and size %d\n", nitems, size);
+        exit(1);
+    }
+
+    return ptr;
+}
+
+
+//*********************************************//
+//**************** colorConv? *******************//
+//**********************************************//
+
+
+//*********************************************//
+//**************** superPixe? *******************//
+//**********************************************//
+
+
+//*************************************************************//
+//************************ MAIN CODE **************************//
+//*************************************************************//
+
+/**
+ * @brief 
+ * 
+ * @return int 
+ */
+int main(void) {   
+
+    // INITAILZE VARIABLES
+    // Input Image constants
+    int width, height;        //<- width and height of input_img, gives pixel dimensions
+    int channels;             //<- number of channels for input_img (3:rgb or 4:rgba)
+    unsigned char *input_img; //<- input image loaded, uses rgb values for pixels (0-255)
+    float *input_img_lab;     //<- input image, using cielab values 
+    int M_pix;                //<- # of pixels from the input image (M from paper)
+
+    // Output image constants
+    int out_width, out_height; //<- output version of width, height
+    unsigned char *output_img; //<- output version of input_img
+    float *output_img_lab;     //<- output version of input_img_lab
+    int N_pix;                 //<- # of pixels in the output image (N from paper)
+
+    // Superpixel calculation constants
+    FloatVec *superpixel_pos; //<- Super pixel coordinate positions "on input image"
+    int *superpixel_img       //<- array with values for pixels assosiated with a specific superpixel
+    int m_gerstner = 45;       
+
+    // Generate array of super pixels position 
+    //    Specifically creating an array with the center value on a superpixel on the original image
+    //
+ 
+
+    // SET SOME VARIABLES (TODO: Embedd some of these with the MAKE during file generation)
+    out_width = 16; out_height = 16; 
+    N_pix = out_width* out_height;
     
-    
+
+    //*** ******************* ***//
+    //*** PROCESS INPUT IMAGE ***//
+    //*** ******************* ***//
+
+    // Load input image
+    input_img = wrp_stbi_load("SonicFlower.jpeg", &width, &height, &channels, 0);
+
+    // Get M pixels count for input image
+    M_pix = width * height;
+
+    // Create input_img_lab version
+    input_img_lab = (float *) wrp_calloc(M_pix *channels, sizeof(float)); 
+
+    unsigned char *p; float *pl;
+    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*channels); p += channels, pl += channels) {
+        rgb2lab(*p, *(p + 1), *(p + 2), pl, pl + 1, pl + 2);
+    }
+
+    // Allocate space for output image contents
+    output_img = (unsigned char *) wrp_malloc(N_pix * channels); 
+    output_img_lab = (float *) wrp_calloc(N_pix * channels, sizeof(float)); 
+
     //*** ******************** ***//
     //*** (4.1) INITIALIZATION ***//
     //*** ******************** ***//
 
-    // Establish superpixel data structures 
-    size_t img_size = width * height * channels;
-    size_t out_img_size = out_width * out_height * channels;
-    unsigned char *out_img = (unsigned char *) malloc(out_img_size);
+    // Create superpixel arrays
+    superpixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
+    superpixel_img = (int *) wrp_calloc(M_pix, sizeof(int));
 
-    // Generate array of super pixels position 
-    //    Specifically creating an array with the center value on a superpixel on the original image
-    FloatVec *superpixel_pos = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec)); 
-    if (superpixel_pos == NULL) {
-        printf("Unable to allocate memory for the superpixel_pos image.\n");
-        exit(1);
-    }
-    
     // initialize superpixel positions (centers)
     for (int j = 0; j < out_height; ++j) {
         for (int i = 0; i < out_width; ++i) {
+            // Calculate midpoint value
             float x = (i + 0.5f) * width / out_width;
             float y = (j + 0.5f) * height / out_height;
             FloatVec pos = {x, y};
+
+            // Set value
             superpixel_pos[out_width * j + i] = pos;
-            
-            // ********** DEBUG ********** //
-            //printf("superpixel %d: (%f, %f)\n", out_width * j + i, x, y);
-            // ********** DEBUG ********** //
         }
     }
 
-    // Initial assignment of pixels to a specific superpxel
-    int *superpixel_img = (int *) calloc(width * height, sizeof(int));  
+    // Initial assignment of pixels to a specific superpxel  
     for (int j = 0; j < height; ++j) {
         for (int i = 0; i < width; ++i) {
+            // Calculate which superpixel to set
             float dx = (float) width/(float) out_width;
             float dy = (float) height/(float) out_height;
             int x = (int) ((float) i / dx);
             int y = (int) ((float) j / dy);
+
+            // Set Value
             superpixel_img[width * j + i] = out_width * y + x;
-            
-            // ********** DEBUG ********** //
-            //printf("Pixel %d: (%d)\n", width * j + i, out_width * y + x);
-            // ********** DEBUG ********** //
         }
     }
 
-    // Create and convert images into lab
-    // Create image pixels in the lab space for input and output
-    float *lab_image = (float *) calloc(img_size, sizeof(float));   // input lab image
-    float *lab_out = (float *) calloc(out_img_size, sizeof(float)); // output lab image 
-    if (lab_image == NULL || lab_out == NULL) {
-        printf("Unable to allocate memory for the cielab image.\n");
-        exit(1);
-    }
-    // Loop through pixels to save them in lab space
-    unsigned char *p;
-    float *pl;
-    for(p = img, pl = lab_image; p != img + img_size; p += channels, pl += channels) {
-        rgb2lab(*p, *(p + 1), *(p + 2), pl, pl + 1, pl + 2);
-    }
-
-    
     //*** ******************* ***//
     //*** CORE ALGORITHM LOOP ***//
     //*** ******************* ***//
 
     // Size of super pixel on input image
-    float S = sqrt(((float) (width * height))/((float) (out_width * out_height)));
+    float S = sqrt(((float) (M_pix))/((float) (N_pix)));
     
     // update superpixel segments
     for (int iter = 0; iter < 35; ++iter) {
@@ -198,14 +275,14 @@ int main(void) {
                         int curr_spx = (int) round(curr_spixel.x);
                         int curr_spy = (int) round(curr_spixel.y);
                         curr_spidx = curr_spy * width + curr_spx;
-                        float dist_curr = dist_k(m_gerstner, S, lab_image[curr_spidx*channels], 
-                                                lab_image[curr_spidx*channels + 1], lab_image[curr_spidx*channels + 2], 
-                                                curr_spx, curr_spy, lab_image[curr_idx*channels], lab_image[curr_idx*channels + 1], 
-                                                lab_image[curr_idx*channels + 2], xx, yy);
-                        float dist_new = dist_k(m_gerstner, S, lab_image[idx*channels], 
-                                                lab_image[idx*channels + 1], lab_image[idx*channels + 2], 
-                                                x, y, lab_image[curr_idx*channels], lab_image[curr_idx*channels + 1], 
-                                                lab_image[curr_idx*channels + 2], xx, yy);
+                        float dist_curr = dist_k(m_gerstner, S, input_img_lab[curr_spidx*channels], 
+                                                input_img_lab[curr_spidx*channels + 1], input_img_lab[curr_spidx*channels + 2], 
+                                                curr_spx, curr_spy, input_img_lab[curr_idx*channels], input_img_lab[curr_idx*channels + 1], 
+                                                input_img_lab[curr_idx*channels + 2], xx, yy);
+                        float dist_new = dist_k(m_gerstner, S, input_img_lab[idx*channels], 
+                                                input_img_lab[idx*channels + 1], input_img_lab[idx*channels + 2], 
+                                                x, y, input_img_lab[curr_idx*channels], input_img_lab[curr_idx*channels + 1], 
+                                                input_img_lab[curr_idx*channels + 2], xx, yy);
                         if (dist_new < dist_curr) {
                             superpixel_img[curr_idx] = out_width*j + i;
                         }
@@ -217,7 +294,7 @@ int main(void) {
 
         // Variables to find mean color values
         FloatVec *sp_sums = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec));
-        float *color_sums = (float *) calloc(out_img_size, sizeof(float));
+        float *color_sums = (float *) calloc(N_pix * channels, sizeof(float));
         int *sp_count = (int *) calloc(out_width * out_height, sizeof(int)); 
 
         // Find the mean colors (from input image) for each superpixel
@@ -229,9 +306,9 @@ int main(void) {
                 sp_sums[spidx].x += i;
                 sp_sums[spidx].y += j;
 
-                color_sums[3*spidx] += lab_image[3*idx];
-                color_sums[3*spidx + 1] += lab_image[3*idx + 1];
-                color_sums[3*spidx + 2] += lab_image[3*idx + 2];
+                color_sums[3*spidx] += input_img_lab[3*idx];
+                color_sums[3*spidx + 1] += input_img_lab[3*idx + 1];
+                color_sums[3*spidx + 2] += input_img_lab[3*idx + 2];
             }
         }
         
@@ -247,10 +324,10 @@ int main(void) {
                 FloatVec newpos = {x, y};
                 superpixel_pos[spidx] = newpos;
 
-                // Set lab_out to new mean value
-                lab_out[3*spidx] = color_sums[3*spidx]/sp_count[spidx];
-                lab_out[3*spidx + 1] = color_sums[3*spidx + 1]/sp_count[spidx];
-                lab_out[3*spidx + 2] = color_sums[3*spidx + 2]/sp_count[spidx];
+                // Set output_img_lab to new mean value
+                output_img_lab[3*spidx] = color_sums[3*spidx]/sp_count[spidx];
+                output_img_lab[3*spidx + 1] = color_sums[3*spidx + 1]/sp_count[spidx];
+                output_img_lab[3*spidx + 2] = color_sums[3*spidx + 2]/sp_count[spidx];
                 
             }
         }
@@ -305,16 +382,16 @@ int main(void) {
     //     for (int i = 0; i < width; i++) {
     //         int idx = j*width + i;
     //         int spidx = superpixel_img[idx];
-    //         lab2rgb(lab_out[3*spidx], lab_out[3*spidx + 1], lab_out[3*spidx + 2], &out_img[3*idx], &out_img[3*idx + 1], &out_img[3*idx + 2]);
+    //         lab2rgb(output_img_lab[3*spidx], output_img_lab[3*spidx + 1], output_img_lab[3*spidx + 2], &output_img[3*idx], &output_img[3*idx + 1], &output_img[3*idx + 2]);
     //         // if ((superpixel_img[idx]/out_width % 2 == 0 && superpixel_img[idx] % 2 == 0) ||
     //         //     (superpixel_img[idx]/out_width % 2 == 1 && superpixel_img[idx] % 2 == 1)) {
-    //         //     out_img[idx*3] = 0;
-    //         //     out_img[idx*3 + 1] = 0;
-    //         //     out_img[idx*3 + 2] = 0;
+    //         //     output_img[idx*3] = 0;
+    //         //     output_img[idx*3 + 1] = 0;
+    //         //     output_img[idx*3 + 2] = 0;
     //         // } else {
-    //         //     out_img[idx*3] = 255;
-    //         //     out_img[idx*3 + 1] = 255;
-    //         //     out_img[idx*3 + 2] = 255;
+    //         //     output_img[idx*3] = 255;
+    //         //     output_img[idx*3 + 1] = 255;
+    //         //     output_img[idx*3 + 2] = 255;
     //         // }
     //     }
     // }
@@ -323,12 +400,13 @@ int main(void) {
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
-            lab2rgb(lab_out[3*idx], lab_out[3*idx + 1], lab_out[3*idx + 2], &out_img[3*idx], &out_img[3*idx + 1], &out_img[3*idx + 2]);
+            lab2rgb(output_img_lab[3*idx], output_img_lab[3*idx + 1], output_img_lab[3*idx + 2], 
+                    &output_img[3*idx], &output_img[3*idx + 1], &output_img[3*idx + 2]);
         }
     }
 
     // Passed in the correct number of channels, in this case the number desired
-    stbi_write_jpg("SonicFlower_output.jpeg", out_width, out_height, channels, out_img, 100);
+    stbi_write_jpg("SonicFlower_output.jpeg", out_width, out_height, channels, output_img, 100);
     
 
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
@@ -337,14 +415,20 @@ int main(void) {
     
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
  
-    stbi_image_free(img);
+    // FREE STUFF
+    stbi_image_free(input_img);
+    free(input_img_lab);
+
+    free(output_img);
+    free(output_img_lab);
 }
 
 
 
 
-// DEBUG HELPER FUNCTION STUFF
-
+//****************************************************************//
+//**************** DEBUG HELPER FUNCTION STUFF *******************//
+//****************************************************************//
 
 /**
  * @brief Check how in range a float is to consider it "equal"
@@ -371,7 +455,7 @@ int in_range(unsigned char* p1, unsigned char* p2){
  * @param image_2_name file name of second image
  * @param print_content state whether or not we want to print differnt pixels
  */
-int image_diff(char* image_1_name, char* image_2_name, int print_content){
+int image_diff(char const *image_1_name, char const *image_2_name, int print_content){
     printf("DEBUG: Running image_diff\n");
     // Initilize variables
     int widthg, heightg, channelsg;
