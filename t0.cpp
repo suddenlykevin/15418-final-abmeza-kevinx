@@ -1,6 +1,8 @@
 /**
  * @file t0.cpp
- * @author Anthony Meza (you@domain.com)
+ * @authors Kevin Xie () 
+ *          Anthony Meza (abmeza)
+ * 
  * @brief  This has been taken from an online tutorial to figure out how to use
  *         stb_image files for our project. Link found: 
  *         https://solarianprogrammer.com/2019/06/10/c-programming-reading-writing-images-stb_image-libraries/
@@ -15,33 +17,50 @@
  * 
  */
 
+
+// Import util libraries
 #include "util/colorConv.h"
+#include "util/superPixel.h"
+
+// Import stb_image libraries
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image/stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image/stb_image_write.h"
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <algorithm> 
 #include <stack>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image/stb_image.h"
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image/stb_image_write.h"
 
+/**
+ * @brief position vector data structure
+ */
 typedef struct {
-    float x;
-    float y;
+    float x;   //< x coor
+    float y;   //< y coor
 } FloatVec;
 
-//DEBUG: FUNCTION USED TO CHECK DIFF BETWEEN PIXELS IN IMAGE
-int in_range(unsigned char* p1, unsigned char* p2){
-    float value = ( ((float)*p1) - ((float) *p2));
-    
-    if (abs(value) > 2){
-        return 1;
-    }
-    return 0;
-}
-
+/**
+ * @brief Performs the SILC algorithm to help figure out the superpixel contents
+ * 
+ * @param m 
+ * @param S 
+ * @param l_k 
+ * @param a_k 
+ * @param b_k 
+ * @param x_k 
+ * @param y_k 
+ * @param l_i 
+ * @param a_i 
+ * @param b_i 
+ * @param x_i 
+ * @param y_i 
+ * @return float 
+ */
 float dist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
            float l_i, float a_i, float b_i, int x_i, int y_i) {
     float d_lab = sqrt(pow(l_k - l_i, 2.f) + pow(a_k - a_i, 2.f) + pow(b_k - b_i, 2.f));
@@ -50,112 +69,71 @@ float dist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
     return d_lab + k * d_xy;
 }
 
-//DEBUG: FUNCTION USED TO FIND WHAT PIXELS ARE DIFFRENT BETWEEN TWO IMAGES
-/**
- * @brief 
- * 
- * @param image_1_name file name of first image
- * @param image_2_name file name of second image
- * @param print_content state whether or not we want to print differnt pixels
- */
-int image_diff(char* image_1_name, char* image_2_name, int print_content){
-    printf("DEBUG: Running image_diff\n");
-    // Initilize variables
-    int widthg, heightg, channelsg;
-    int widthb, heightb, channelsb;
 
-    // Get content of first image
-    unsigned char *img_g = stbi_load(image_1_name, &widthg, &heightg, &channelsg, 0);
-    if(img_g == NULL) {
-        printf("Error in loading the image\n");
-        exit(1);
-    }
-    printf("Loaded image G with a width of %dpx, a height of %dpx and %d channels\n", widthg, heightg, channelsg);
-    
-    //Get content of second image
-    unsigned char *img_b = stbi_load(image_2_name, &widthb, &heightb, &channelsb, 0);
-    if(img_b == NULL) {
-        printf("Error in loading the image\n");
-        exit(1);
-    }
-    printf("Loaded image B with a width of %dpx, a height of %dpx and %d channels\n", widthb, heightb, channelsb);
-    
-    size_t img_sizeg = widthg * heightg * channelsg;
-    size_t img_sizeb = widthb * heightb * channelsb;
-
-    // Loop through pixels to make them grey scale
-    int pix = 0;
-    int count =0;
-    for(unsigned char *pg = img_g, *pb = img_b;  
-        pg != img_g + img_sizeg; 
-        pg += channelsg, pb += channelsb){
-
-        if ( in_range(pg, pb) || in_range(pg+1, pb+1) || in_range(pg+2, pb+2) ) {
-            if (print_content){
-                printf("At %d: pg = (%d,%d,%d) pb = (%d,%d,%d) dif: (%d,%d,%d) \n", 
-                        pix, 
-                        *pg, *(pg+1), *(pg+2), 
-                        *pb, *(pb+1), *(pb+2),
-                        *pg - *pb, *(pg+1) - *(pb+1), *(pg+2) - *(pb+2));
-            }
-            count++;
-        }
-        pix++;
-    }
-    printf("Count: %d\n",count);
-    printf("DEBUG: DONE image_diff\n");
-}
 
 
 int main(void) {
     
+    //*** ********* ***//
+    //*** VARIABLES ***//
+    //*** ********* ***//
+    
+    // Values of input image
     int width, height, channels;
-
+    // Values of output image
     int out_width = 16;
     int out_height = 16;
+    // Some thingy TODO
     int m_gerstner = 45;
-
-    float L, a, b;
-    unsigned char R, G, B;
-
-    /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
-    
-    // image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
-    
-    /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
  
-    /// Load the image into img
-    unsigned char *img = stbi_load("barack-obama-12782369-1-402.jpg", &width, &height, &channels, 0);
+    //*** ********** ***//
+    //*** LOAD IMAGE ***//
+    //*** ********** ***//
+
+    unsigned char *img = stbi_load("SonicFlower.jpeg", &width, &height, &channels, 0);
     if(img == NULL) {
         printf("Error in loading the image\n");
         exit(1);
     }
+
+    //********** DEGUB **********//
     printf("Loaded image with a width of %dpx, a height of %dpx and %d channels\n", width, height, channels);
+    //********** DEGUB **********//
     
-    ///*** Set up superpixel data structures ***///
+    
+    //*** ******************** ***//
+    //*** (4.1) INITIALIZATION ***//
+    //*** ******************** ***//
+
+    // Establish superpixel data structures 
     size_t img_size = width * height * channels;
     size_t out_img_size = out_width * out_height * channels;
-    // unsigned char *out_img = (unsigned char *) malloc(img_size);
     unsigned char *out_img = (unsigned char *) malloc(out_img_size);
-    FloatVec *superpixel_pos = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec));
-    int *superpixel_img = (int *) calloc(width * height, sizeof(int));
+
+    // Generate array of super pixels position 
+    //    Specifically creating an array with the center value on a superpixel on the original image
+    FloatVec *superpixel_pos = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec)); 
     if (superpixel_pos == NULL) {
-        printf("Unable to allocate memory for the cielab image.\n");
+        printf("Unable to allocate memory for the superpixel_pos image.\n");
         exit(1);
     }
-
-    // initialize superpixel positions
+    
+    // initialize superpixel positions (centers)
     for (int j = 0; j < out_height; ++j) {
         for (int i = 0; i < out_width; ++i) {
             float x = (i + 0.5f) * width / out_width;
             float y = (j + 0.5f) * height / out_height;
             FloatVec pos = {x, y};
             superpixel_pos[out_width * j + i] = pos;
-            printf("superpixel %d: (%f, %f)\n", out_width * j + i, x, y);
+            
+            // ********** DEBUG ********** //
+            //printf("superpixel %d: (%f, %f)\n", out_width * j + i, x, y);
+            // ********** DEBUG ********** //
         }
     }
 
-    // initialize superpixel assignments
+    // Initial assignment of pixels to a specific superpxel
+    int *superpixel_img = (int *) calloc(width * height, sizeof(int));  
     for (int j = 0; j < height; ++j) {
         for (int i = 0; i < width; ++i) {
             float dx = (float) width/(float) out_width;
@@ -163,24 +141,34 @@ int main(void) {
             int x = (int) ((float) i / dx);
             int y = (int) ((float) j / dy);
             superpixel_img[width * j + i] = out_width * y + x;
+            
+            // ********** DEBUG ********** //
+            //printf("Pixel %d: (%d)\n", width * j + i, out_width * y + x);
+            // ********** DEBUG ********** //
         }
     }
 
-    float *lab_image = (float *) calloc(img_size, sizeof(float));
-    float *lab_out = (float *) calloc(out_img_size, sizeof(float));
+    // Create and convert images into lab
+    // Create image pixels in the lab space for input and output
+    float *lab_image = (float *) calloc(img_size, sizeof(float));   // input lab image
+    float *lab_out = (float *) calloc(out_img_size, sizeof(float)); // output lab image 
     if (lab_image == NULL || lab_out == NULL) {
         printf("Unable to allocate memory for the cielab image.\n");
         exit(1);
     }
-    
+    // Loop through pixels to save them in lab space
     unsigned char *p;
     float *pl;
-
-    // Loop through pixels to save them in lab space
     for(p = img, pl = lab_image; p != img + img_size; p += channels, pl += channels) {
         rgb2lab(*p, *(p + 1), *(p + 2), pl, pl + 1, pl + 2);
     }
 
+    
+    //*** ******************* ***//
+    //*** CORE ALGORITHM LOOP ***//
+    //*** ******************* ***//
+
+    // Size of super pixel on input image
     float S = sqrt(((float) (width * height))/((float) (out_width * out_height)));
     
     // update superpixel segments
@@ -226,11 +214,13 @@ int main(void) {
             }
         }
 
-        // update positions and mean pallette
+
+        // Variables to find mean color values
         FloatVec *sp_sums = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec));
         float *color_sums = (float *) calloc(out_img_size, sizeof(float));
-        int *sp_count = (int *) calloc(out_width * out_height, sizeof(int));
+        int *sp_count = (int *) calloc(out_width * out_height, sizeof(int)); 
 
+        // Find the mean colors (from input image) for each superpixel
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
                 int idx = j*width + i;
@@ -245,13 +235,19 @@ int main(void) {
             }
         }
         
+        // Repostion superpixels and update the output color pallete
         for (int j = 0; j < out_height; j++) {
             for (int i = 0; i < out_width; i++) {
+                // Index of superpixel
                 int spidx = j*out_width + i;
+
+                // Calcualte new position for super pixel
                 float x = sp_sums[spidx].x / sp_count[spidx];
                 float y = sp_sums[spidx].y / sp_count[spidx];
                 FloatVec newpos = {x, y};
                 superpixel_pos[spidx] = newpos;
+
+                // Set lab_out to new mean value
                 lab_out[3*spidx] = color_sums[3*spidx]/sp_count[spidx];
                 lab_out[3*spidx + 1] = color_sums[3*spidx + 1]/sp_count[spidx];
                 lab_out[3*spidx + 2] = color_sums[3*spidx + 2]/sp_count[spidx];
@@ -323,6 +319,7 @@ int main(void) {
     //     }
     // }
 
+    // Create output image in rgb color values
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
@@ -341,4 +338,84 @@ int main(void) {
     /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
  
     stbi_image_free(img);
+}
+
+
+
+
+// DEBUG HELPER FUNCTION STUFF
+
+
+/**
+ * @brief Check how in range a float is to consider it "equal"
+ * 
+ * @param p1 first float value
+ * @param p2 second pixel value
+ * @return int 
+ */
+int in_range(unsigned char* p1, unsigned char* p2){
+    float value = ( ((float)*p1) - ((float) *p2));
+    
+    // The range we will consider it to be "equal"
+    if (abs(value) > 2){
+        return 1;
+    }
+    return 0;
+}
+
+
+/**
+ * @brief find what pixels are different between two images
+ * 
+ * @param image_1_name file name of first image
+ * @param image_2_name file name of second image
+ * @param print_content state whether or not we want to print differnt pixels
+ */
+int image_diff(char* image_1_name, char* image_2_name, int print_content){
+    printf("DEBUG: Running image_diff\n");
+    // Initilize variables
+    int widthg, heightg, channelsg;
+    int widthb, heightb, channelsb;
+
+    // Get content of first image
+    unsigned char *img_g = stbi_load(image_1_name, &widthg, &heightg, &channelsg, 0);
+    if(img_g == NULL) {
+        printf("Error in loading the image\n");
+        exit(1);
+    }
+    printf("Loaded image G with a width of %dpx, a height of %dpx and %d channels\n", widthg, heightg, channelsg);
+    
+    //Get content of second image
+    unsigned char *img_b = stbi_load(image_2_name, &widthb, &heightb, &channelsb, 0);
+    if(img_b == NULL) {
+        printf("Error in loading the image\n");
+        exit(1);
+    }
+    printf("Loaded image B with a width of %dpx, a height of %dpx and %d channels\n", widthb, heightb, channelsb);
+    
+    size_t img_sizeg = widthg * heightg * channelsg;
+    size_t img_sizeb = widthb * heightb * channelsb;
+
+    // Loop through pixels to make them grey scale
+    int pix = 0;
+    int count =0;
+    for(unsigned char *pg = img_g, *pb = img_b;  
+        pg != img_g + img_sizeg; 
+        pg += channelsg, pb += channelsb){
+
+        if ( in_range(pg, pb) || in_range(pg+1, pb+1) || in_range(pg+2, pb+2) ) {
+            if (print_content){
+                printf("At %d: pg = (%d,%d,%d) pb = (%d,%d,%d) dif: (%d,%d,%d) \n", 
+                        pix, 
+                        *pg, *(pg+1), *(pg+2), 
+                        *pb, *(pb+1), *(pb+2),
+                        *pg - *pb, *(pg+1) - *(pb+1), *(pg+2) - *(pb+2));
+            }
+            count++;
+        }
+        pix++;
+    }
+    printf("Count: %d\n",count);
+    printf("DEBUG: DONE image_diff\n");
+    return 0;
 }

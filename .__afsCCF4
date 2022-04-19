@@ -1,0 +1,30 @@
+/**
+ * @file printDebug.h
+ * @author Anthony Meza (abmeza)v
+ * @brief Print functions used to help debug content in the main file
+ * @version 0.1
+ * @date 2022-04-19
+ * 
+ * @copyright Copyright (c) 2022
+ * 
+ */
+
+
+/**
+ * @brief Check how in range a float is to consider it "equal"
+ * 
+ * @param p1 first float value
+ * @param p2 second pixel value
+ * @return int 
+ */
+int in_range(unsigned char* p1, unsigned char* p2);
+
+
+/**
+ * @brief find what pixels are different between two images
+ * 
+ * @param image_1_name file name of first image
+ * @param image_2_name file name of second image
+ * @param print_content state whether or not we want to print differnt pixels
+ */
+int image_diff(char* image_1_name, char* image_2_name, int print_content);

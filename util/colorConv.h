@@ -1,4 +1,16 @@
-
+/**
+ * @file colorConv.h
+ * @author Kevin Xie ()
+ * 
+ * @brief Header file for functions that convert from rgb to cielab and back
+ *        Contains essentially all the important constants
+ * 
+ * @version 0.1
+ * @date 2022-04-10
+ * 
+ * @copyright Copyright (c) 2022
+ * 
+ */
 
 /****************************************************************************************\
 *                                     RGB <-> L*a*b*                                     *
