@@ -80,6 +80,11 @@ float dist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
     return d_lab + k * d_xy;
 }
 
+//implements a gaussian function with std "sigma" and mean "mean"
+float gaussian(float x, float sigma, float mean) {
+    return exp((x-mean)*(x-mean)/(-2.0f*sigma*sigma))/sqrt(6.28319*sigma*sigma);
+}
+
 //*************************************************************//
 //**************** WRAPPER HELPER FUNCTIONS *******************//
 //*************************************************************//
@@ -224,6 +229,7 @@ int main(void) {
     int out_width, out_height; //<- output version of width, height
     unsigned char *output_img;      //<- output version of input_img
     LabColor *output_img_lab;     //<- output version of input_img_lab
+    LabColor *buf_lab;     //<- buffer for smoothing
     int N_pix;                 //<- # of pixels in the output image (N from paper)
 
     // Superpixel calculation 
@@ -246,8 +252,8 @@ int main(void) {
 
     // SET SOME VARIABLES 
     
-    //(TODO: Embedd some of these with the MAKE during file generation)
-    out_width = 16; out_height = 16;
+    //(TODO: Dynamic through cmdline)
+    out_width = 32; out_height = 32;
     
     K_colors = 8;
     k_count = 0;
@@ -288,7 +294,8 @@ int main(void) {
     palette_lab = (LabColor *) wrp_calloc(M_pix *channels, sizeof(float));
     prob_sp_to_color = (float *) wrp_calloc(N_pix*K_colors , sizeof(float));  
     prob_color_to_any = (float *) wrp_calloc(K_colors , sizeof(float));  
-
+    
+    buf_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor));
     output_img = (unsigned char *) wrp_malloc(N_pix * channels); 
     output_img_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor)); 
 
@@ -424,7 +431,7 @@ int main(void) {
             }
         }
 
-        ///*** Laplacian Smoothing ***///
+        // smooth positions
         for (int j = 0; j < out_height; j++) {
             for (int i = 0; i < out_width; i++) {                
                 int spidx = j*out_width + i;
@@ -469,7 +476,52 @@ int main(void) {
             }
         }
     
-    
+        // smooth colors
+        for(int j = 0; j < out_height; ++j) {
+            for(int i = 0; i < out_width; ++i) {
+
+            //get bounds of 3x3 kernel (make sure we don't go off the image)
+            int min_x = std::max(0,i-1);
+            int max_x = std::min(out_width-1,i+1);
+            int min_y = std::max(0,j-1);
+            int max_y = std::min(out_height-1,j+1);
+
+            //Initialize
+            LabColor sum = {0.f, 0.f, 0.f};
+            float weight = 0.f;
+
+            //get current SP color and (grid) position
+            LabColor superpixel_color = output_img_lab[j*out_width + i];
+            FloatVec p = {(float) j, (float) i};
+
+            //get bilaterally weighted average color of SP neighborhood
+            for(int ii = min_x; ii<= max_x; ++ii) {
+                for(int jj = min_y; jj<=max_y; ++jj) {
+                
+                LabColor c_n = output_img_lab[jj*out_width + ii];
+                float d_color = (float) (pow(superpixel_color.L - c_n.L, 2.f) +
+                                             pow(superpixel_color.a - c_n.a, 2.f) +
+                                             pow(superpixel_color.b - c_n.b, 2.f));
+                float w_color = gaussian(d_color, 2.0f ,0.0f);
+                float d_pos = (float) (pow(i-ii, 2.f) + pow(j-jj, 2.f));
+                float w_pos = gaussian(d_pos, 0.97f, 0.0f);
+                float w_total = w_color*w_pos;
+
+                weight += w_total;
+                sum.L += c_n.L*w_total;
+                sum.a += c_n.a*w_total;
+                sum.b += c_n.b*w_total;
+                }
+            }
+            sum.L *= 1.0f/weight;
+            sum.a *= 1.0f/weight;
+            sum.b *= 1.0f/weight;
+            buf_lab[j*out_width + i] = sum;
+            }
+        }
+        //update the SP mean colors with the smoothed values
+        memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
+            
         //*** ************************************** ***//
         //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
         //*** ************************************** ***//
