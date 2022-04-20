@@ -213,29 +213,34 @@ void init_superPixels(FloatVec* superPixel_pos, int* superPixel_img, int in_widt
 int main(void) {   
 
     // INITAILZE VARIABLES
-    // Input Image Constants
+    // Input Image 
     int width, height;        //<- width and height of input_img, gives pixel dimensions
     int channels;             //<- number of channels for input_img (3:rgb or 4:rgba)
     unsigned char *input_img;      //<- input image loaded, uses rgb values for pixels (0-255)
     LabColor *input_img_lab;     //<- input image, using cielab values 
     int M_pix;                //<- # of pixels from the input image (M from paper)
 
-    // Output Image Constants
+    // Output Image 
     int out_width, out_height; //<- output version of width, height
     unsigned char *output_img;      //<- output version of input_img
     LabColor *output_img_lab;     //<- output version of input_img_lab
     int N_pix;                 //<- # of pixels in the output image (N from paper)
 
-    // Superpixel calculation constants
+    // Superpixel calculation 
     FloatVec *superPixel_pos; //<- Super pixel coordinate positions "on input image"
     int *superPixel_img;      //<- array with values for pixels assosiated with a specific superpixel
     int m_gerstner = 45;       
 
-    // Palette Values
+    // Palette 
     LabColor *palette_lab;   //<- palette array with 
     int k_count;          //<- Current # of colors stored in palette_lab
     int K_colors;         //<- number of colors we aim to use in the pallette
  
+    // Temperature
+    int T;   //<- Current temperature
+    int T_c; //<- T critical, what will determine convergence and increase in palette (TODO: Edit)
+    int T_f; //<- T final, dictates when we finish our core algorithm (TODO: Edit)
+
 
     // SET SOME VARIABLES 
     
@@ -246,7 +251,7 @@ int main(void) {
     k_count = 0;
      
     N_pix = out_width * out_height;
-    
+    T_f = 1;    
 
     //*** ******************* ***//
     //*** PROCESS INPUT IMAGE ***//
@@ -266,7 +271,7 @@ int main(void) {
     for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*channels); p += channels, pl ++) {
         rgb2lab(*p, *(p+1), *(p+2), &(pl->L), &(pl->a), &(pl->b));
     }
-    
+
     //*** ******************** ***//
     //*** (4.1) INITIALIZATION ***//
     //*** ******************** ***//
