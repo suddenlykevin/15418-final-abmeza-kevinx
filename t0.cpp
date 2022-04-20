@@ -37,9 +37,6 @@
 #include <stack>
 
 
-#define getVariableName(x) #x
-
-
 /**
  * @brief position vector data structure
  */
@@ -47,6 +44,16 @@ typedef struct {
     float x;   //< x coor
     float y;   //< y coor
 } FloatVec;
+
+/**
+ * @brief data structure for Lab color scheme
+ */
+typedef struct {
+    float L;   //< L value, represents light
+    float a;   //< a value, represents TODO
+    float b;   //< b value, repereents TODO
+} LabColor;
+
 
 /**
  * @brief Performs the SILC algorithm to help figure out the superpixel contents
@@ -107,7 +114,7 @@ void* wrp_malloc(size_t size){
 
     // Check that no error occured
     if (ptr == NULL) {
-        printf("Unable to allocate memory with malloc of size %d\n", size);
+        printf("Unable to allocate memory with malloc of size %zu\n", size);
         exit(1);
     }
 
@@ -126,7 +133,7 @@ void* wrp_calloc(size_t nitems, size_t size){
 
     // Check that no error occured
     if (ptr == NULL) {
-        printf("Unable to allocate memory with calloc of items %d and size %d\n", nitems, size);
+        printf("Unable to allocate memory with calloc of items %zu and size %zu\n", nitems, size);
         exit(1);
     }
 
@@ -144,6 +151,56 @@ void* wrp_calloc(size_t nitems, size_t size){
 //**********************************************//
 
 
+/**
+ * @brief Initializes the superPixel_pos array and the superPixel_img array
+ * 
+ * @param[out] superPixel_pos Array with superpixel center positions on the input image
+ * @param[out] superPixel_img holds info which super pixel all input image pixels have
+ * @param[in]  in_width       pixel width of input image
+ * @param[in]  in_height      pixel height of input image
+ * @param[in]  out_width      pixel width of output image
+ * @param[in]  out_height     pixel height of output image
+ */
+void init_superPixels(FloatVec* superPixel_pos, int* superPixel_img, int in_width, int in_height, int out_width, int out_height){
+    // Get change in length of values
+    float dx = (float) in_width/(float) out_width;
+    float dy = (float) in_height/(float) out_height;
+
+
+    // initialize superpixel positions (centers)
+    for (int j = 0; j < out_height; ++j) {
+        for (int i = 0; i < out_width; ++i) {
+
+            // Calculate midpoint value
+            float x = ((float) i + 0.5f) * dx;
+            float y = ((float) j + 0.5f) * dy;
+            FloatVec pos =  (FloatVec) {x,y};
+            // Set value
+            superPixel_pos[out_width * j + i] = pos;
+            
+            // ********** DEBUG ********** //
+            //printf("superpixel %d: (%f, %f)\n", out_width * j + i, x, y);
+            // ********** DEBUG ********** //
+        }
+    }
+
+    // Initial assignment of pixels to a specific superpxel  
+    for (int j = 0; j < in_height; ++j) {
+        for (int i = 0; i < in_width; ++i) {
+            // Calculate which superpixel to set
+            int x = (int) ((float) i / dx);
+            int y = (int) ((float) j / dy);
+
+            // Set Value
+            superPixel_img[in_width * j + i] = out_width * y + x;
+
+            // ********** DEBUG ********** //
+            //printf("Pixel %d: (%d)\n", in_width * j + i, out_width * y + x);
+            // ********** DEBUG ********** //
+        }
+    }
+}
+
 //*************************************************************//
 //************************ MAIN CODE **************************//
 //*************************************************************//
@@ -156,32 +213,39 @@ void* wrp_calloc(size_t nitems, size_t size){
 int main(void) {   
 
     // INITAILZE VARIABLES
-    // Input Image constants
+    // Input Image Constants
     int width, height;        //<- width and height of input_img, gives pixel dimensions
     int channels;             //<- number of channels for input_img (3:rgb or 4:rgba)
-    unsigned char *input_img; //<- input image loaded, uses rgb values for pixels (0-255)
-    float *input_img_lab;     //<- input image, using cielab values 
+    unsigned char *input_img;      //<- input image loaded, uses rgb values for pixels (0-255)
+    LabColor *input_img_lab;     //<- input image, using cielab values 
     int M_pix;                //<- # of pixels from the input image (M from paper)
 
-    // Output image constants
+    // Output Image Constants
     int out_width, out_height; //<- output version of width, height
-    unsigned char *output_img; //<- output version of input_img
-    float *output_img_lab;     //<- output version of input_img_lab
+    unsigned char *output_img;      //<- output version of input_img
+    LabColor *output_img_lab;     //<- output version of input_img_lab
     int N_pix;                 //<- # of pixels in the output image (N from paper)
 
     // Superpixel calculation constants
-    FloatVec *superpixel_pos; //<- Super pixel coordinate positions "on input image"
-    int *superpixel_img       //<- array with values for pixels assosiated with a specific superpixel
+    FloatVec *superPixel_pos; //<- Super pixel coordinate positions "on input image"
+    int *superPixel_img;      //<- array with values for pixels assosiated with a specific superpixel
     int m_gerstner = 45;       
 
-    // Generate array of super pixels position 
-    //    Specifically creating an array with the center value on a superpixel on the original image
-    //
+    // Palette Values
+    LabColor *palette_lab;   //<- palette array with 
+    int k_count;          //<- Current # of colors stored in palette_lab
+    int K_colors;         //<- number of colors we aim to use in the pallette
  
 
-    // SET SOME VARIABLES (TODO: Embedd some of these with the MAKE during file generation)
-    out_width = 16; out_height = 16; 
-    N_pix = out_width* out_height;
+    // SET SOME VARIABLES 
+    
+    //(TODO: Embedd some of these with the MAKE during file generation)
+    out_width = 16; out_height = 16;
+    
+    K_colors = 8;
+    k_count = 0;
+     
+    N_pix = out_width * out_height;
     
 
     //*** ******************* ***//
@@ -189,57 +253,60 @@ int main(void) {
     //*** ******************* ***//
 
     // Load input image
-    input_img = wrp_stbi_load("SonicFlower.jpeg", &width, &height, &channels, 0);
+    
+    input_img= wrp_stbi_load("SonicFlower.jpeg", &width, &height, &channels, 0);
 
     // Get M pixels count for input image
     M_pix = width * height;
 
     // Create input_img_lab version
-    input_img_lab = (float *) wrp_calloc(M_pix *channels, sizeof(float)); 
+    input_img_lab = (LabColor *) wrp_calloc(M_pix, sizeof(LabColor));
 
-    unsigned char *p; float *pl;
-    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*channels); p += channels, pl += channels) {
-        rgb2lab(*p, *(p + 1), *(p + 2), pl, pl + 1, pl + 2);
+    unsigned char *p; LabColor *pl;
+    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*channels); p += channels, pl ++) {
+        rgb2lab(*p, *(p+1), *(p+2), &(pl->L), &(pl->a), &(pl->b));
     }
-
-    // Allocate space for output image contents
-    output_img = (unsigned char *) wrp_malloc(N_pix * channels); 
-    output_img_lab = (float *) wrp_calloc(N_pix * channels, sizeof(float)); 
-
+    
     //*** ******************** ***//
     //*** (4.1) INITIALIZATION ***//
     //*** ******************** ***//
 
-    // Create superpixel arrays
-    superpixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
-    superpixel_img = (int *) wrp_calloc(M_pix, sizeof(int));
 
-    // initialize superpixel positions (centers)
-    for (int j = 0; j < out_height; ++j) {
-        for (int i = 0; i < out_width; ++i) {
-            // Calculate midpoint value
-            float x = (i + 0.5f) * width / out_width;
-            float y = (j + 0.5f) * height / out_height;
-            FloatVec pos = {x, y};
+    ///*** Allocate Array Space ***///
+    superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
+    superPixel_img = (int *) wrp_calloc(M_pix, sizeof(int));
+    palette_lab = (LabColor *) wrp_calloc(M_pix *channels, sizeof(float)); \
+    output_img = (unsigned char *) wrp_malloc(N_pix * channels); 
+    output_img_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor)); 
 
-            // Set value
-            superpixel_pos[out_width * j + i] = pos;
-        }
+    ///*** Initialize Superpixel Contents ***///
+    init_superPixels(superPixel_pos, superPixel_img, width, height, out_width, out_height);
+
+
+    ///*** Initialize Palette Contents ***///
+    // Find mean of all M_pix color inputs
+    LabColor color_sum;
+    //add all colors
+    for (int p = 0; p < M_pix; p++) {
+        color_sum.L += input_img_lab[p].L;
+        color_sum.a += input_img_lab[p].a;
+        color_sum.b += input_img_lab[p].b;
     }
-
-    // Initial assignment of pixels to a specific superpxel  
-    for (int j = 0; j < height; ++j) {
-        for (int i = 0; i < width; ++i) {
-            // Calculate which superpixel to set
-            float dx = (float) width/(float) out_width;
-            float dy = (float) height/(float) out_height;
-            int x = (int) ((float) i / dx);
-            int y = (int) ((float) j / dy);
-
-            // Set Value
-            superpixel_img[width * j + i] = out_width * y + x;
-        }
+    // divide all by M_pix
+    color_sum.L = color_sum.L / (float) M_pix;
+    color_sum.a = color_sum.a / (float) M_pix;
+    color_sum.b = color_sum.b / (float) M_pix;
+    // update all superpixel color values
+    for (int p = 0; p < N_pix; p++) {
+        output_img_lab[p].L = color_sum.L;
+        output_img_lab[p].a = color_sum.a;
+        output_img_lab[p].b = color_sum.b;
     }
+    // Store this color
+    palette_lab[0] = color_sum;
+    k_count ++;
+
+
 
     //*** ******************* ***//
     //*** CORE ALGORITHM LOOP ***//
@@ -256,7 +323,7 @@ int main(void) {
             for (int i = 0; i < out_width; ++i) {
                 
                 // get local region
-                FloatVec center = superpixel_pos[out_width * j + i];
+                FloatVec center = superPixel_pos[out_width * j + i];
                 int min_x = std::max(0.0f, center.x - S);
                 int min_y = std::max(0.0f, center.y - S);
                 int max_x = std::min((float) (width - 1), center.x + S);
@@ -270,21 +337,21 @@ int main(void) {
                 for (int yy = min_y; yy <= max_y; ++yy) {
                     for (int xx = min_x; xx <= max_x; ++xx) {
                         int curr_idx = yy * width + xx;
-                        int curr_spidx = superpixel_img[curr_idx];
-                        FloatVec curr_spixel = superpixel_pos[curr_spidx];
+                        int curr_spidx = superPixel_img[curr_idx];
+                        FloatVec curr_spixel = superPixel_pos[curr_spidx];
                         int curr_spx = (int) round(curr_spixel.x);
                         int curr_spy = (int) round(curr_spixel.y);
                         curr_spidx = curr_spy * width + curr_spx;
-                        float dist_curr = dist_k(m_gerstner, S, input_img_lab[curr_spidx*channels], 
-                                                input_img_lab[curr_spidx*channels + 1], input_img_lab[curr_spidx*channels + 2], 
-                                                curr_spx, curr_spy, input_img_lab[curr_idx*channels], input_img_lab[curr_idx*channels + 1], 
-                                                input_img_lab[curr_idx*channels + 2], xx, yy);
-                        float dist_new = dist_k(m_gerstner, S, input_img_lab[idx*channels], 
-                                                input_img_lab[idx*channels + 1], input_img_lab[idx*channels + 2], 
-                                                x, y, input_img_lab[curr_idx*channels], input_img_lab[curr_idx*channels + 1], 
-                                                input_img_lab[curr_idx*channels + 2], xx, yy);
+                        float dist_curr = dist_k(m_gerstner, S, input_img_lab[curr_spidx].L, 
+                                                input_img_lab[curr_spidx].a, input_img_lab[curr_spidx].b, 
+                                                curr_spx, curr_spy, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
+                                                input_img_lab[curr_idx].b, xx, yy);
+                        float dist_new = dist_k(m_gerstner, S, input_img_lab[idx].L, 
+                                                input_img_lab[idx].a, input_img_lab[idx].b, 
+                                                x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
+                                                input_img_lab[curr_idx].b, xx, yy);
                         if (dist_new < dist_curr) {
-                            superpixel_img[curr_idx] = out_width*j + i;
+                            superPixel_img[curr_idx] = out_width*j + i;
                         }
                     }
                 }
@@ -293,22 +360,22 @@ int main(void) {
 
 
         // Variables to find mean color values
-        FloatVec *sp_sums = (FloatVec *) calloc(out_width * out_height, sizeof(FloatVec));
+        FloatVec *sp_sums = (FloatVec *) calloc(N_pix, sizeof(FloatVec));
         float *color_sums = (float *) calloc(N_pix * channels, sizeof(float));
-        int *sp_count = (int *) calloc(out_width * out_height, sizeof(int)); 
+        int *sp_count = (int *) calloc(N_pix, sizeof(int)); 
 
         // Find the mean colors (from input image) for each superpixel
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
                 int idx = j*width + i;
-                int spidx = superpixel_img[idx];
+                int spidx = superPixel_img[idx];
                 sp_count[spidx] ++;
                 sp_sums[spidx].x += i;
                 sp_sums[spidx].y += j;
 
-                color_sums[3*spidx] += input_img_lab[3*idx];
-                color_sums[3*spidx + 1] += input_img_lab[3*idx + 1];
-                color_sums[3*spidx + 2] += input_img_lab[3*idx + 2];
+                color_sums[3*spidx] += input_img_lab[idx].L;
+                color_sums[3*spidx + 1] += input_img_lab[idx].a;
+                color_sums[3*spidx + 2] += input_img_lab[idx].b;
             }
         }
         
@@ -322,12 +389,12 @@ int main(void) {
                 float x = sp_sums[spidx].x / sp_count[spidx];
                 float y = sp_sums[spidx].y / sp_count[spidx];
                 FloatVec newpos = {x, y};
-                superpixel_pos[spidx] = newpos;
+                superPixel_pos[spidx] = newpos;
 
                 // Set output_img_lab to new mean value
-                output_img_lab[3*spidx] = color_sums[3*spidx]/sp_count[spidx];
-                output_img_lab[3*spidx + 1] = color_sums[3*spidx + 1]/sp_count[spidx];
-                output_img_lab[3*spidx + 2] = color_sums[3*spidx + 2]/sp_count[spidx];
+                output_img_lab[spidx].L = color_sums[3*spidx]/sp_count[spidx];
+                output_img_lab[spidx].a = color_sums[3*spidx + 1]/sp_count[spidx];
+                output_img_lab[spidx].b = color_sums[3*spidx + 2]/sp_count[spidx];
                 
             }
         }
@@ -339,28 +406,28 @@ int main(void) {
                 FloatVec sum = {0, 0};
                 float count = 0.0f;
                 if(i > 0) {
-                    sum.x += superpixel_pos[j*out_width + i-1].x;
-                    sum.y += superpixel_pos[j*out_width + i-1].y;
+                    sum.x += superPixel_pos[j*out_width + i-1].x;
+                    sum.y += superPixel_pos[j*out_width + i-1].y;
                     count += 1.0f;
                 }
                 if(i < out_width -1) {
-                    sum.x += superpixel_pos[j*out_width + i+1].x;
-                    sum.y += superpixel_pos[j*out_width + i+1].y;
+                    sum.x += superPixel_pos[j*out_width + i+1].x;
+                    sum.y += superPixel_pos[j*out_width + i+1].y;
                     count += 1.0f;
                 }
                 if(j > 0) {
-                    sum.x += superpixel_pos[(j-1)*out_width + i].x;
-                    sum.y += superpixel_pos[(j-1)*out_width + i].y;
+                    sum.x += superPixel_pos[(j-1)*out_width + i].x;
+                    sum.y += superPixel_pos[(j-1)*out_width + i].y;
                     count += 1.0f;
                 }
                 if(j < out_height - 1) {
-                    sum.x += superpixel_pos[(j+1)*out_width + i].x;
-                    sum.y += superpixel_pos[(j+1)*out_width + i].y;
+                    sum.x += superPixel_pos[(j+1)*out_width + i].x;
+                    sum.y += superPixel_pos[(j+1)*out_width + i].y;
                     count += 1.0f;
                 }
                 sum.x /= count;
                 sum.y /= count;
-                FloatVec pos = superpixel_pos[spidx];
+                FloatVec pos = superPixel_pos[spidx];
                 FloatVec newPos = {0, 0};
                 if(i == 0 || i == out_width -1) {
                     newPos.x = pos.x;
@@ -373,7 +440,7 @@ int main(void) {
                     newPos.y = 0.6f*pos.y + 0.4f*sum.y;
                 }
                 // printf("pos: (%f, %f) -> (%f, %f)\n", pos.x, pos.y, newPos.x, newPos.y);
-                superpixel_pos[spidx] = newPos;
+                superPixel_pos[spidx] = newPos;
             }
         }
     }
@@ -381,10 +448,10 @@ int main(void) {
     // for (int j = 0; j < height; j++) {
     //     for (int i = 0; i < width; i++) {
     //         int idx = j*width + i;
-    //         int spidx = superpixel_img[idx];
+    //         int spidx = superPixel_img[idx];
     //         lab2rgb(output_img_lab[3*spidx], output_img_lab[3*spidx + 1], output_img_lab[3*spidx + 2], &output_img[3*idx], &output_img[3*idx + 1], &output_img[3*idx + 2]);
-    //         // if ((superpixel_img[idx]/out_width % 2 == 0 && superpixel_img[idx] % 2 == 0) ||
-    //         //     (superpixel_img[idx]/out_width % 2 == 1 && superpixel_img[idx] % 2 == 1)) {
+    //         // if ((superPixel_img[idx]/out_width % 2 == 0 && superPixel_img[idx] % 2 == 0) ||
+    //         //     (superPixel_img[idx]/out_width % 2 == 1 && superPixel_img[idx] % 2 == 1)) {
     //         //     output_img[idx*3] = 0;
     //         //     output_img[idx*3 + 1] = 0;
     //         //     output_img[idx*3 + 2] = 0;
@@ -400,8 +467,8 @@ int main(void) {
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
-            lab2rgb(output_img_lab[3*idx], output_img_lab[3*idx + 1], output_img_lab[3*idx + 2], 
-                    &output_img[3*idx], &output_img[3*idx + 1], &output_img[3*idx + 2]);
+            lab2rgb(output_img_lab[idx].L, output_img_lab[idx].a, output_img_lab[idx].b, 
+                    &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
         }
     }
 
