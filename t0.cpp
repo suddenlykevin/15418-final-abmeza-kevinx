@@ -242,6 +242,7 @@ int main(void) {
     int palette_size;      //<- Current # of colors stored in palette_lab
     float *prob_c;         //<- array of probabiities that a color in the palette is set to ANY super pixel
     float *prob_sp;        //<- array of probabiities of each super pixel TODO:EDIT
+    float *prob_c_if_sp;   //<- List of P(c_k|p_s) values for all superpixels
     int K_colors;          //<- number of colors we aim to use in the pallette
  
     // Temperature
@@ -291,7 +292,7 @@ int main(void) {
     superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
     superPixel_img = (int *) wrp_calloc(M_pix, sizeof(int));
 
-    palette_lab = (LabColor *) wrp_calloc(M_pix *channels, sizeof(float));
+    palette_lab = (LabColor *) wrp_calloc(M_pix, sizeof(float));
     prob_c = (float *) wrp_calloc(K_colors , sizeof(float)); 
     prob_sp= (float *) wrp_calloc(N_pix , sizeof(float)); 
 
@@ -331,7 +332,8 @@ int main(void) {
 
 
     ///*** Set Temperature Values ***///
-    //T = T_c * 1.1f
+    //TODO: FIX T_C OR SOMETHINGS
+    T = T_c * 1.1f;
 
     //*** ******************* ***//
     //*** CORE ALGORITHM LOOP ***//
@@ -339,7 +341,7 @@ int main(void) {
 
     // Size of super pixel on input image
     float S = sqrt(((float) (M_pix))/((float) (N_pix)));
-    
+
     // update superpixel segments
     for (int iter = 0; iter < 35; ++iter) {
 
@@ -522,42 +524,40 @@ int main(void) {
         }
         //update the SP mean colors with the smoothed values
         memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
-            
+        free(sp_sums);
+        free(color_sums);
+        free(sp_count);
         //*** ************************************** ***//
         //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
         //*** ************************************** ***//
-
         // List of P(c_k|p_s) values for all superpixels
-        float *prob_c_if_sp = (float *) wrp_calloc(N_pix*K_colors, sizeof(float));        
-
+        prob_c_if_sp = (float *) wrp_calloc(N_pix*K_colors, sizeof(float));   
         // Update superpixel colors from color palette based on P(c_k|p_s) calculation
         for(int p = 0; p < N_pix; p++) {
-                // Get the best color value to update the superpixel color
-                int best_c = -1;
-                float best_norm_val = 0.0f;
-                for (int c = 0; c < palette_size; c++){
-                    // m_s' - c_k TODO: MIGHT NOT WORK?
-                    LabColor pixDiff;
-                    pixDiff.L = output_img_lab[p].L - palette_lab[c].L;
-                    pixDiff.a = output_img_lab[p].a - palette_lab[c].a;
-                    pixDiff.b = output_img_lab[p].b - palette_lab[c].b;
+            // Get the best color value to update the superpixel color
+            int best_c = -1;
+            float best_norm_val = 0.0f;
+            for (int c = 0; c < palette_size; c++){
+                // m_s' - c_k TODO: MIGHT NOT WORK?
+                LabColor pixDiff;
+                pixDiff.L = output_img_lab[p].L - palette_lab[c].L;
+                pixDiff.a = output_img_lab[p].a - palette_lab[c].a;
+                pixDiff.b = output_img_lab[p].b - palette_lab[c].b;
 
-                    // || m_s' - c_k ||
-                    float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
+                // || m_s' - c_k ||
+                float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
 
-                    //  - (|| m_s' - c_k ||/T)
-                    float pow_val = -1.0f*(norm_val/T);
-
-                    prob_c_if_sp[c + (p*N_pix)] = prob_c[c] * exp(pow_val);
-                    //Update if better value
-                    if (best_c == -1 || norm_val < best_norm_val){
-                        best_c = c;
-                        best_norm_val = norm_val;
-                    }
+                //  - (|| m_s' - c_k ||/T)
+                float pow_val = -1.0f*(norm_val/T);
+                prob_c_if_sp[c + (p*K_colors)] = prob_c[c] * exp(pow_val);
+                //Update if better value
+                if (best_c == -1 || norm_val < best_norm_val){
+                    best_c = c;
+                    best_norm_val = norm_val;
                 }
-                // Store values to update output_img_lab to best pixel value
-                buf_lab[p] = palette_lab[best_c];
-            }
+            } 
+            // Store values to update output_img_lab to best pixel value
+            buf_lab[p] = palette_lab[best_c];
         }
 
         // Update to probability color is assosiated to ANY superpixel (P(c_k))
@@ -565,13 +565,14 @@ int main(void) {
         for (int c = 0; c < palette_size; c++){
             prob_c[c] = 0.0f;
             for (int p = 0; p < N_pix; p++){
-                prob_c[c] = prob_c[c] +  prob_c_if_sp[c + (p*N_pix)] * prob_sp[p];
+                prob_c[c] = prob_c[c] + prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
             }
         }
 
+
         //update the SP colors wiht updated values
         memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
-
+        
         //*** ******************** ***//
         //*** (4.3) REFINE PALETTE ***//
         //*** ******************** ***//
@@ -582,9 +583,9 @@ int main(void) {
             LabColor c_sum = {0.0f,0.0f,0.0f};
             // Observe all superpixels to get sum of equation
             for (int p = 0; p < N_pix; p++){
-                c_sum.L = c_sum.L + output_img_lab[p].L*prob_c_if_sp[c + (p*N_pix)]*prob_sp[p];
-                c_sum.a = c_sum.a + output_img_lab[p].a*prob_c_if_sp[c + (p*N_pix)]*prob_sp[p];
-                c_sum.b = c_sum.b + output_img_lab[p].b*prob_c_if_sp[c + (p*N_pix)]*prob_sp[p];
+                c_sum.L = c_sum.L + output_img_lab[p].L * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
+                c_sum.a = c_sum.a + output_img_lab[p].a * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
+                c_sum.b = c_sum.b + output_img_lab[p].b * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
             }
 
             //Update palette color
@@ -594,10 +595,12 @@ int main(void) {
 
         }
 
+        free(prob_c_if_sp);
         //*** ******************** ***//
         //*** (4.3) EXPAND PALETTE ***//
         //*** ******************** ***//
     
+}
     
     
 
