@@ -232,14 +232,16 @@ int main(void) {
     int m_gerstner = 45;       
 
     // Palette 
-    LabColor *palette_lab;   //<- palette array with 
-    int k_count;          //<- Current # of colors stored in palette_lab
-    int K_colors;         //<- number of colors we aim to use in the pallette
+    LabColor *palette_lab;    //<- palette array with color values in palette
+    float *prob_sp_to_color;  //<- array of probabiities that a superpixel is set to a specific color
+    float *prob_color_to_any; //<- array of probabiities that color in the palette is set to ANY super pixel
+    int k_count;              //<- Current # of colors stored in palette_lab
+    int K_colors;             //<- number of colors we aim to use in the pallette
  
     // Temperature
-    int T;   //<- Current temperature
-    int T_c; //<- T critical, what will determine convergence and increase in palette (TODO: Edit)
-    int T_f; //<- T final, dictates when we finish our core algorithm (TODO: Edit)
+    float T;   //<- Current temperature
+    float T_c; //<- T critical, what will determine convergence and increase in palette (TODO: Edit)
+    float T_f; //<- T final, dictates when we finish our core algorithm (TODO: Edit)
 
 
     // SET SOME VARIABLES 
@@ -251,7 +253,9 @@ int main(void) {
     k_count = 0;
      
     N_pix = out_width * out_height;
-    T_f = 1;    
+    T_f = 1.f;
+    T_c = 1.f; //TODO: Should be updated
+
 
     //*** ******************* ***//
     //*** PROCESS INPUT IMAGE ***//
@@ -280,15 +284,19 @@ int main(void) {
     ///*** Allocate Array Space ***///
     superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
     superPixel_img = (int *) wrp_calloc(M_pix, sizeof(int));
-    palette_lab = (LabColor *) wrp_calloc(M_pix *channels, sizeof(float)); \
+
+    palette_lab = (LabColor *) wrp_calloc(M_pix *channels, sizeof(float));
+    prob_sp_to_color = (float *) wrp_calloc(N_pix*K_colors , sizeof(float));  
+    prob_color_to_any = (float *) wrp_calloc(K_colors , sizeof(float));  
+
     output_img = (unsigned char *) wrp_malloc(N_pix * channels); 
     output_img_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor)); 
 
-    ///*** Initialize Superpixel Contents ***///
+    ///*** Initialize Superpixel Values ***///
     init_superPixels(superPixel_pos, superPixel_img, width, height, out_width, out_height);
 
 
-    ///*** Initialize Palette Contents ***///
+    ///*** Initialize Palette Values ***///
     // Find mean of all M_pix color inputs
     LabColor color_sum;
     //add all colors
@@ -307,11 +315,15 @@ int main(void) {
         output_img_lab[p].a = color_sum.a;
         output_img_lab[p].b = color_sum.b;
     }
-    // Store this color
+    // Store color and update prob to any
     palette_lab[0] = color_sum;
-    k_count ++;
+    prob_color_to_any[0] = 1;
+    k_count = 1; 
 
 
+
+    ///*** Set Temperature Values ***///
+    //T = T_c * 1.1f
 
     //*** ******************* ***//
     //*** CORE ALGORITHM LOOP ***//
@@ -323,7 +335,11 @@ int main(void) {
     // update superpixel segments
     for (int iter = 0; iter < 35; ++iter) {
 
-        // update boundaries
+        //*** ************************ ***//
+        //*** (4.2) REFINE SUPERPIXELS ***//
+        //*** ************************ ***//
+
+        ///*** Update boundaries of pixels assosiated with super pixels ***///
         for (int j = 0; j < out_height; ++j) {
             for (int i = 0; i < out_width; ++i) {
                 
@@ -355,6 +371,8 @@ int main(void) {
                                                 input_img_lab[idx].a, input_img_lab[idx].b, 
                                                 x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
                                                 input_img_lab[curr_idx].b, xx, yy);
+
+                        // Check if the distance is less in order to minimize
                         if (dist_new < dist_curr) {
                             superPixel_img[curr_idx] = out_width*j + i;
                         }
@@ -363,12 +381,14 @@ int main(void) {
             }
         }
 
-
-        // Variables to find mean color values
+        ///*** Find the mean colors of superpixels based on pixels it has***///
+        ///*** TODO: WE NEED TO UPDATE THIS WITH PALETTE ***///
+        /* CITE FROM PAPER: However, in our implementation, the color of each superpixel is set to the palette color that is
+            associated with the superpixel (the construction of this mapping is
+            explained in Section 4.3).*/
         FloatVec *sp_sums = (FloatVec *) calloc(N_pix, sizeof(FloatVec));
         float *color_sums = (float *) calloc(N_pix * channels, sizeof(float));
-        int *sp_count = (int *) calloc(N_pix, sizeof(int)); 
-
+        int *sp_count = (int *) calloc(N_pix, sizeof(int));
         // Find the mean colors (from input image) for each superpixel
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
@@ -404,7 +424,7 @@ int main(void) {
             }
         }
 
-        // smooth
+        ///*** Laplacian Smoothing ***///
         for (int j = 0; j < out_height; j++) {
             for (int i = 0; i < out_width; i++) {                
                 int spidx = j*out_width + i;
@@ -448,6 +468,29 @@ int main(void) {
                 superPixel_pos[spidx] = newPos;
             }
         }
+    
+    
+        //*** ************************************** ***//
+        //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
+        //*** ************************************** ***//
+
+        // Find probability that superpixel is assosiated to a specific color(P(c_k|p_s))
+        
+
+        // Find probability color is assosiated to ANY superpixel (P(c_k))
+
+
+        //*** ******************** ***//
+        //*** (4.3) REFINE PALETTE ***//
+        //*** ******************** ***//
+
+        
+
+        //*** ******************** ***//
+        //*** (4.3) EXPAND PALETTE ***//
+        //*** ******************** ***//
+    
+    
     }
 
     // for (int j = 0; j < height; j++) {
@@ -468,6 +511,11 @@ int main(void) {
     //     }
     // }
 
+
+    //*** ******************** ***//
+    //*** PROCESS OUTPUT IMAGE ***//
+    //*** ******************** ***//
+
     // Create output image in rgb color values
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
@@ -480,14 +528,11 @@ int main(void) {
     // Passed in the correct number of channels, in this case the number desired
     stbi_write_jpg("SonicFlower_output.jpeg", out_width, out_height, channels, output_img, 100);
     
+    
+    //*** ********** ***//
+    //*** FREE STUFF ***//
+    //*** ********** ***//
 
-    /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
-    
-    // image_diff("SonicFlower.jpeg" , "SonicFlower_gray.jpeg", 1);
-    
-    /// TESTING TO SEE WHAT IS DIFFERENT WITH THE TWO OUTPUT IMAGES ///
- 
-    // FREE STUFF
     stbi_image_free(input_img);
     free(input_img_lab);
 
