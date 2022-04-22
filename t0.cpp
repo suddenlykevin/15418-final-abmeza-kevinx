@@ -99,7 +99,7 @@ int main(void) {
   
 
     // Create pixImage object!
-    PixImage pixImage(input_img, width, height, out_height, out_width, K_colors);
+    PixImage pixImage(input_img, width, height, out_width, out_height, K_colors);
 
 
     //*** ******************** ***//

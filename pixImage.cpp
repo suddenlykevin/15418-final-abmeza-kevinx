@@ -25,6 +25,60 @@
 #include <math.h>
 using namespace std;
 
+// computes eigendecomposition of real 3x3 hermitian matrix and 
+// returns maximum eigenvalue/vector
+//
+// closed-form solution based on https://hal.archives-ouvertes.fr/hal-01501221/document
+int maxEigen3(float *matrix, float *value, float *vector) {
+    
+    // extract unique values from top triangle
+    float a = matrix[0];
+    float b = matrix[4];
+    float c = matrix[8];
+    float d = matrix[1];
+    float e = matrix[5];
+    float f = matrix[3];
+
+    float x_1 = a*a + b*b + c*c - a*b - a*c - b*c + 3*(d*d + f*f + e*e);
+    float x_2 = -(2*a - b - c) * (2*b - a - c) * (2*c - a - b) + 
+                9*((2*c - a - b)*d*d + (2*b - a - c)*f*f + (2*a - b - c)*e*e) - 54*d*e*f;
+    
+    float phi;
+    if (x_2 > 0) {
+        phi = atan(sqrt(4*(x_1*x_1*x_1) - x_2*x_2)/x_2);
+    } else if (x_2 == 0) {
+        phi = M_PI/2;
+    } else {
+        phi = atan(sqrt(4*(x_1*x_1*x_1) - x_2*x_2)/x_2) + M_PI;
+    }
+
+    float lam_1 = (a + b + c - 2*sqrt(x_1)*cos(phi/3))/3;
+    float lam_2 = (a + b + c + 2*sqrt(x_1)*cos((phi - M_PI)/3))/3;
+    float lam_3 = (a + b + c + 2*sqrt(x_1)*cos((phi + M_PI)/3))/3;
+
+    float lam = (lam_2 > lam_1) ? lam_2 : ((lam_3 > lam_1) ? lam_3 : lam_1);
+
+    // unlikely special case causes divide by zero
+    if (f == 0 || f*(b-lam)-d*e == 0) {
+        return -1;
+    }
+
+    // store highest eigenvalue
+    * value = lam;
+
+    float m = (d*(c-lam)-e*f)/(f*(b-lam)-d*e);
+
+    float v_0 = (lam - c - e*m)/f;
+
+    // store associated eigenvector
+    vector[0] = v_0;
+    vector[1] = m;
+    vector[2] = 1.f;
+
+    return 0;
+}
+
+
 /**
  * @brief Performs the SILC algorithm to help figure out the superpixel contents
  * 
@@ -408,71 +462,71 @@ void PixImage :: iterate(){
         //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
         //*** ************************************** ***//
         // List of P(c_k|p_s) values for all superpixels
-        prob_c_if_sp = (float *) wrp_calloc(N_pix*K_colors, sizeof(float));   
-        // Update superpixel colors from color palette based on P(c_k|p_s) calculation
-        for(int p = 0; p < N_pix; p++) {
-            // Get the best color value to update the superpixel color
-            int best_c = -1;
-            float best_norm_val = 0.0f;
-            for (int c = 0; c < palette_size; c++){
-                // m_s' - c_k TODO: MIGHT NOT WORK?
-                LabColor pixDiff;
-                pixDiff.L = output_img_lab[p].L - palette_lab[c].L;
-                pixDiff.a = output_img_lab[p].a - palette_lab[c].a;
-                pixDiff.b = output_img_lab[p].b - palette_lab[c].b;
+        // prob_c_if_sp = (float *) wrp_calloc(N_pix*K_colors, sizeof(float));   
+        // // Update superpixel colors from color palette based on P(c_k|p_s) calculation
+        // for(int p = 0; p < N_pix; p++) {
+        //     // Get the best color value to update the superpixel color
+        //     int best_c = -1;
+        //     float best_norm_val = 0.0f;
+        //     for (int c = 0; c < palette_size; c++){
+        //         // m_s' - c_k TODO: MIGHT NOT WORK?
+        //         LabColor pixDiff;
+        //         pixDiff.L = output_img_lab[p].L - palette_lab[c].L;
+        //         pixDiff.a = output_img_lab[p].a - palette_lab[c].a;
+        //         pixDiff.b = output_img_lab[p].b - palette_lab[c].b;
 
-                // || m_s' - c_k ||
-                float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
+        //         // || m_s' - c_k ||
+        //         float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
 
-                //  - (|| m_s' - c_k ||/T)
-                float pow_val = -1.0f*(norm_val/T);
-                prob_c_if_sp[c + (p*K_colors)] = prob_c[c] * exp(pow_val);
-                //Update if better value
-                if (best_c == -1 || norm_val < best_norm_val){
-                    best_c = c;
-                    best_norm_val = norm_val;
-                }
-            } 
-            // Store values to update output_img_lab to best pixel value
-            buf_lab[p] = palette_lab[best_c];
-        }
+        //         //  - (|| m_s' - c_k ||/T)
+        //         float pow_val = -1.0f*(norm_val/T);
+        //         prob_c_if_sp[c + (p*K_colors)] = prob_c[c] * exp(pow_val);
+        //         //Update if better value
+        //         if (best_c == -1 || norm_val < best_norm_val){
+        //             best_c = c;
+        //             best_norm_val = norm_val;
+        //         }
+        //     } 
+        //     // Store values to update output_img_lab to best pixel value
+        //     buf_lab[p] = palette_lab[best_c];
+        // }
 
-        // Update to probability color is assosiated to ANY superpixel (P(c_k))
-        // TODO: OPTIMIZATION EXISTS WHERE PREVIOUS LOOPS IS MIXED WITH THIS LOOP
-        for (int c = 0; c < palette_size; c++){
-            prob_c[c] = 0.0f;
-            for (int p = 0; p < N_pix; p++){
-                prob_c[c] = prob_c[c] + prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
-            }
-        }
+        // // Update to probability color is assosiated to ANY superpixel (P(c_k))
+        // // TODO: OPTIMIZATION EXISTS WHERE PREVIOUS LOOPS IS MIXED WITH THIS LOOP
+        // for (int c = 0; c < palette_size; c++){
+        //     prob_c[c] = 0.0f;
+        //     for (int p = 0; p < N_pix; p++){
+        //         prob_c[c] = prob_c[c] + prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
+        //     }
+        // }
 
 
-        //update the SP colors wiht updated values
-        memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
+        // //update the SP colors wiht updated values
+        // memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
         
-        //*** ******************** ***//
-        //*** (4.3) REFINE PALETTE ***//
-        //*** ******************** ***//
+        // //*** ******************** ***//
+        // //*** (4.3) REFINE PALETTE ***//
+        // //*** ******************** ***//
 
-        //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
-        for (int c = 0; c< palette_size; c++){
+        // //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
+        // for (int c = 0; c< palette_size; c++){
 
-            LabColor c_sum = {0.0f,0.0f,0.0f};
-            // Observe all superpixels to get sum of equation
-            for (int p = 0; p < N_pix; p++){
-                c_sum.L = c_sum.L + output_img_lab[p].L * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
-                c_sum.a = c_sum.a + output_img_lab[p].a * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
-                c_sum.b = c_sum.b + output_img_lab[p].b * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
-            }
+        //     LabColor c_sum = {0.0f,0.0f,0.0f};
+        //     // Observe all superpixels to get sum of equation
+        //     for (int p = 0; p < N_pix; p++){
+        //         c_sum.L = c_sum.L + output_img_lab[p].L * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
+        //         c_sum.a = c_sum.a + output_img_lab[p].a * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
+        //         c_sum.b = c_sum.b + output_img_lab[p].b * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
+        //     }
 
-            //Update palette color
-            palette_lab[c].L = c_sum.L/prob_c[c];
-            palette_lab[c].a = c_sum.a/prob_c[c];
-            palette_lab[c].b = c_sum.b/prob_c[c];
+        //     //Update palette color
+        //     palette_lab[c].L = c_sum.L/prob_c[c];
+        //     palette_lab[c].a = c_sum.a/prob_c[c];
+        //     palette_lab[c].b = c_sum.b/prob_c[c];
 
-        }
+        // }
 
-        free(prob_c_if_sp);
+        // free(prob_c_if_sp);
         //*** ******************** ***//
         //*** (4.3) EXPAND PALETTE ***//
         //*** ******************** ***//
