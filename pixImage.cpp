@@ -165,7 +165,7 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
 
 
 /**
- * @brief Initializes the superPixel_pos array and the superPixel_img array
+ * @brief Initializes the superPixel_pos array and the region_map array
  */
 void PixImage :: initSuperPixels(){
     // Get change in length of values
@@ -197,7 +197,7 @@ void PixImage :: initSuperPixels(){
             int y = (int) ((float) j / dy);
 
             // Set Value
-            superPixel_img[in_width * j + i] = out_width * y + x;
+            region_map[in_width * j + i] = out_width * y + x;
 
             // ********** DEBUG ********** //
             //printf("Pixel %d: (%d)\n", in_width * j + i, out_width * y + x);
@@ -217,7 +217,7 @@ void PixImage :: updateSuperPixelMeans(){
     for (int j = 0; j < in_height; j++) {
         for (int i = 0; i < in_width; i++) {
             int idx = j*in_width + i;
-            int spidx = superPixel_img[idx];
+            int spidx = region_map[idx];
             sp_count[spidx] ++;
             sp_sums[spidx].x += i;
             sp_sums[spidx].y += j;
@@ -241,9 +241,9 @@ void PixImage :: updateSuperPixelMeans(){
             superPixel_pos[spidx] = newpos;
 
             // Set output_img_lab to new mean value
-            output_img_lab[spidx].L = color_sums[spidx].L/sp_count[spidx];
-            output_img_lab[spidx].a = color_sums[spidx].a/sp_count[spidx];
-            output_img_lab[spidx].b = color_sums[spidx].b/sp_count[spidx];
+            sp_mean_lab[spidx].L = color_sums[spidx].L/sp_count[spidx];
+            sp_mean_lab[spidx].a = color_sums[spidx].a/sp_count[spidx];
+            sp_mean_lab[spidx].b = color_sums[spidx].b/sp_count[spidx];
         }
     }
 }
@@ -266,24 +266,45 @@ void PixImage :: pushPalettePair(int a, int b) {
     palette_pairs[idx] = newPair;
 }
 
+void PixImage :: getAveragedPalette(LabColor *avg_palette) {
+    for (int i = 0; i < palette_size >> 1; i++) {
+        PalettePair pair = palette_pairs[i];
+        float weight_a = prob_c[pair.a];
+        float weight_b = prob_c[pair.b];
+        float total_weight = weight_a + weight_b;
+        weight_a /= total_weight;
+        weight_b /= total_weight;
+
+        LabColor ca = palette_lab[pair.a];
+        LabColor cb = palette_lab[pair.b];
+
+        LabColor avg = {ca.L*weight_a + cb.L*weight_b,
+                        ca.a*weight_a + cb.a*weight_b,
+                        ca.b*weight_a + cb.b*weight_b};
+        
+        avg_palette[pair.a] = avg;
+        avg_palette[pair.b] = avg;
+    }
+}
+
 void PixImage :: initialize(){
     ///*** Allocate Array Space ***///
     input_img_lab = (LabColor *) wrp_calloc(M_pix, sizeof(LabColor));
 
     superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
-    superPixel_img = (int *) wrp_calloc(M_pix, sizeof(int));
+    region_map = (int *) wrp_calloc(M_pix, sizeof(int));
 
     palette_lab = (LabColor *) wrp_calloc((K_colors + 1) * 2 , sizeof(float));
     palette_size = 0;
     palette_pairs = (PalettePair *) wrp_calloc(K_colors + 1, sizeof(PalettePair));
+    palette_assign = (int *) wrp_calloc(N_pix, sizeof(int));
     prob_c = (float *) wrp_calloc((K_colors + 1) * 2 , sizeof(float)); 
     prob_c_if_sp = (float *) wrp_calloc((K_colors + 1) * 2 * N_pix, sizeof(float));
     prob_sp = 1.0f/(out_width*out_height); 
 
     buf_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor));
     output_img = (unsigned char *) wrp_malloc(N_pix * 3); 
-    output_img_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor)); 
-
+    sp_mean_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor)); 
 
     ///*** Create input_img_lab version ***///
     unsigned char *p; LabColor *pl;
@@ -299,9 +320,9 @@ void PixImage :: initialize(){
     LabColor color_sum;
     //add all colors
     for (int p = 0; p < N_pix; p++) {
-        color_sum.L += output_img_lab[p].L;
-        color_sum.a += output_img_lab[p].a;
-        color_sum.b += output_img_lab[p].b;
+        color_sum.L += sp_mean_lab[p].L;
+        color_sum.a += sp_mean_lab[p].a;
+        color_sum.b += sp_mean_lab[p].b;
     }
     // divide all by M_pix
     color_sum.L = color_sum.L * prob_sp;
@@ -337,12 +358,23 @@ void PixImage :: iterate(){
         //*** (4.2) REFINE SUPERPIXELS ***//
         //*** ************************ ***//
 
+        //*** ************************ ***//
+        //*** (4.2.1) ASSOCIATE SUPERPIXELS ***//
+        //*** ************************ ***//
+
         ///*** Update boundaries of pixels assosiated with super pixels ***///
+        LabColor average_palette[(K_colors + 1)*2];
+        getAveragedPalette(average_palette);
+
+        float distance[M_pix];
+        for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
+
         for (int j = 0; j < out_height; ++j) {
             for (int i = 0; i < out_width; ++i) {
                 
                 // get local region
-                FloatVec center = superPixel_pos[out_width * j + i];
+                int idx = out_width * j + i;
+                FloatVec center = superPixel_pos[idx];
                 int min_x = std::max(0.0f, center.x - S);
                 int min_y = std::max(0.0f, center.y - S);
                 int max_x = std::min((float) (in_width - 1), center.x + S);
@@ -350,29 +382,23 @@ void PixImage :: iterate(){
                 //printf("iter %d superpixel %d: (%d, %d) -> (%d, %d)\n", iter, out_width * j + i, min_x, min_y, max_x, max_y);
                 int x = (int) round(center.x);
                 int y = (int) round(center.y);
-                int idx = y*in_width + x;
-                
+
+                LabColor sp_color = palette_lab[palette_assign[idx]];
+
                 // within region
                 for (int yy = min_y; yy <= max_y; ++yy) {
                     for (int xx = min_x; xx <= max_x; ++xx) {
                         int curr_idx = yy * in_width + xx;
-                        int curr_spidx = superPixel_img[curr_idx];
-                        FloatVec curr_spixel = superPixel_pos[curr_spidx];
-                        int curr_spx = (int) round(curr_spixel.x);
-                        int curr_spy = (int) round(curr_spixel.y);
-                        curr_spidx = curr_spy * in_width + curr_spx;
-                        float dist_curr = dist_k(m_gerstner, S, input_img_lab[curr_spidx].L, 
-                                                input_img_lab[curr_spidx].a, input_img_lab[curr_spidx].b, 
-                                                curr_spx, curr_spy, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
-                                                input_img_lab[curr_idx].b, xx, yy);
-                        float dist_new = dist_k(m_gerstner, S, input_img_lab[idx].L, 
-                                                input_img_lab[idx].a, input_img_lab[idx].b, 
+
+                        // check new distance
+                        float dist_new = dist_k(m_gerstner, S, sp_color.L, sp_color.a, sp_color.b, 
                                                 x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
                                                 input_img_lab[curr_idx].b, xx, yy);
 
                         // Check if the distance is less in order to minimize
-                        if (dist_new < dist_curr) {
-                            superPixel_img[curr_idx] = out_width*j + i;
+                        if (distance[curr_idx] < 0 || dist_new < distance[curr_idx]) {
+                            distance[curr_idx] = dist_new;
+                            region_map[curr_idx] = out_width*j + i;
                         }
                     }
                 }
@@ -441,14 +467,14 @@ void PixImage :: iterate(){
             float weight = 0.f;
 
             //get current SP color and (grid) position
-            LabColor superpixel_color = output_img_lab[j*out_width + i];
+            LabColor superpixel_color = sp_mean_lab[j*out_width + i];
             FloatVec p = {(float) j, (float) i};
 
             //get bilaterally weighted average color of SP neighborhood
             for(int ii = min_x; ii<= max_x; ++ii) {
                 for(int jj = min_y; jj<=max_y; ++jj) {
                 
-                LabColor c_n = output_img_lab[jj*out_width + ii];
+                LabColor c_n = sp_mean_lab[jj*out_width + ii];
                 float d_color = (float) (pow(superpixel_color.L - c_n.L, 2.f) +
                                              pow(superpixel_color.a - c_n.a, 2.f) +
                                              pow(superpixel_color.b - c_n.b, 2.f));
@@ -473,7 +499,7 @@ void PixImage :: iterate(){
         
         printf("smoothed colors\n");
         //update the SP mean colors with the smoothed values
-        memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
+        memcpy(sp_mean_lab, buf_lab, N_pix * sizeof(LabColor));
         
         printf("memcpy\n");
         
@@ -561,7 +587,7 @@ void PixImage :: iterate(){
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
-            lab2rgb(output_img_lab[idx].L, output_img_lab[idx].a, output_img_lab[idx].b, 
+            lab2rgb(sp_mean_lab[idx].L, sp_mean_lab[idx].a, sp_mean_lab[idx].b, 
                     &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
         }
     }
@@ -585,7 +611,7 @@ void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector)
             
             // find color error with current superpixel
             LabColor pl_color = palette_lab[palette_index];    
-            LabColor sp_color = output_img_lab[idx];
+            LabColor sp_color = sp_mean_lab[idx];
             float L_error = fabs(pl_color.L - sp_color.L);
             float a_error = fabs(pl_color.a - sp_color.a);
             float b_error = fabs(pl_color.b - sp_color.b);
@@ -627,10 +653,10 @@ void PixImage :: freeAll(){
     free(input_img_lab);
 
     free(output_img); 
-    free(output_img_lab); 
+    free(sp_mean_lab); 
 
     free(superPixel_pos);
-    free(superPixel_img);
+    free(region_map);
 
     free(palette_lab); 
     free(prob_c); 

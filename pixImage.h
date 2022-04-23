@@ -52,17 +52,18 @@ class PixImage{
     int out_width, out_height; //<- output version of width, height
     int N_pix;                 //<- # of pixels in the output image (N from paper)
     unsigned char *output_img; //<- output version of input_img
-    LabColor *output_img_lab;  //<- output version of input_img_lab
     LabColor *buf_lab;         //<- buffer for smoothing and palette refinement
 
     // Superpixel calculation 
     FloatVec *superPixel_pos; //<- Super pixel coordinate positions "on input image"
-    int *superPixel_img;      //<- array with values for pixels assosiated with a specific superpixel 
+    LabColor *sp_mean_lab;  //<- superpixel mean color value
+    int *region_map;      //<- array with values for pixels associated with a specific superpixel 
 
     // Palette 
     int K_colors;          //<- number of colors we aim to use in the pallette
     int palette_size;      //<- Current # of colors stored in palette_lab
     PalettePair *palette_pairs;
+    int *palette_assign; //<- palette assignment for each superpixel
     LabColor *palette_lab; //<- palette array with color values in palette
 
     float *prob_c;         //<- array of probabiities that a color in the palette is set to ANY super pixel
@@ -102,7 +103,9 @@ class PixImage{
     void pushPaletteColor(LabColor color, float prob);
 
     void pushPalettePair(int a, int b);
-    
+
+    void getAveragedPalette(LabColor *avg_palette);
+
     /**
      * @brief 
      * 
