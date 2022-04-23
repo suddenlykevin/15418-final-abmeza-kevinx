@@ -22,7 +22,7 @@
 #include <string.h>
 #include <algorithm> 
 #include <stack>
-#include <math.h>
+#include <cmath>
 using namespace std;
 
 // computes eigendecomposition of real 3x3 hermitian matrix and 
@@ -208,8 +208,11 @@ void PixImage :: initSuperPixels(){
 
 void PixImage :: updateSuperPixelMeans(){
     FloatVec sp_sums[N_pix];
+    memset(sp_sums, 0, N_pix*sizeof(FloatVec));
     LabColor color_sums[N_pix];
+    memset(color_sums, 0, N_pix*sizeof(LabColor));
     int sp_count[N_pix];
+    memset(sp_count, 0, N_pix*sizeof(int));
     // Find the mean colors (from input image) for each superpixel
     for (int j = 0; j < in_height; j++) {
         for (int i = 0; i < in_width; i++) {
@@ -444,8 +447,13 @@ void PixImage :: iterate(){
             buf_lab[j*out_width + i] = sum;
             }
         }
+
+        
+        printf("smoothed colors\n");
         //update the SP mean colors with the smoothed values
         memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
+        
+        printf("memcpy\n");
         
         //*** ************************************** ***//
         //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
@@ -556,9 +564,9 @@ void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector)
             // find color error with current superpixel
             LabColor pl_color = palette_lab[palette_index];    
             LabColor sp_color = output_img_lab[idx];
-            float L_error = abs(pl_color.L - sp_color.L);
-            float a_error = abs(pl_color.a - sp_color.a);
-            float b_error = abs(pl_color.b - sp_color.b);
+            float L_error = fabs(pl_color.L - sp_color.L);
+            float a_error = fabs(pl_color.a - sp_color.a);
+            float b_error = fabs(pl_color.b - sp_color.b);
 
             // update covariance
             covariance[0] += prob_oc*L_error*L_error;
