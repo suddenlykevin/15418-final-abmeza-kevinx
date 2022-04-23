@@ -14,10 +14,10 @@
 
 
 // GLOBAL CONSTANTS
-const float T_c = 1.0f; //<- T critical, what will determine convergence and increase in palette (TODO: Edit)
 const float T_f = 1.0f; //<- T final, dictates when we finish our core algorithm (TODO: Edit)
 const int m_gerstner = 45; //<- 
-
+const float kSubclusterPertubation = .8f; //<- amount to perturb subcluster of each palette color
+const float kT0SafetyFactor = 1.1f; //<- initial temperature is 1.1*T_c
 /**
  * @brief position vector data structure
  */
@@ -35,6 +35,10 @@ typedef struct {
     float b;   //< b value, repereents TODO
 } LabColor;
 
+typedef struct {
+    int a;
+    int b;
+} PalettePair;
 
 class PixImage{
   public:
@@ -58,6 +62,7 @@ class PixImage{
     // Palette 
     int K_colors;          //<- number of colors we aim to use in the pallette
     int palette_size;      //<- Current # of colors stored in palette_lab
+    PalettePair *palette_pairs;
     LabColor *palette_lab; //<- palette array with color values in palette
 
     float *prob_c;         //<- array of probabiities that a color in the palette is set to ANY super pixel
@@ -94,6 +99,10 @@ class PixImage{
 
     void updateSuperPixelMeans();
 
+    void pushPaletteColor(LabColor color, float prob);
+
+    void pushPalettePair(int a, int b);
+    
     /**
      * @brief 
      * 

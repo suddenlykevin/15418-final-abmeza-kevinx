@@ -248,6 +248,24 @@ void PixImage :: updateSuperPixelMeans(){
     }
 }
 
+void PixImage :: pushPaletteColor(LabColor color, float prob) {
+    palette_lab[palette_size] = color;
+    prob_c[palette_size] = prob;
+    for (int idx = 0; idx < N_pix; idx ++) {
+        prob_c_if_sp[palette_size*N_pix + idx] = prob;
+    }
+    palette_size ++; 
+}
+
+void PixImage :: pushPalettePair(int a, int b) {
+    PalettePair newPair = {a, b};
+    int idx = (palette_size >> 1) - 1;
+    if (idx < 0 || idx > K_colors + 1) {
+        return;
+    }
+    palette_pairs[idx] = newPair;
+}
+
 void PixImage :: initialize(){
     ///*** Allocate Array Space ***///
     input_img_lab = (LabColor *) wrp_calloc(M_pix, sizeof(LabColor));
@@ -255,9 +273,11 @@ void PixImage :: initialize(){
     superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
     superPixel_img = (int *) wrp_calloc(M_pix, sizeof(int));
 
-
-    palette_lab = (LabColor *) wrp_calloc(M_pix, sizeof(float));
-    prob_c = (float *) wrp_calloc(K_colors , sizeof(float)); 
+    palette_lab = (LabColor *) wrp_calloc((K_colors + 1) * 2 , sizeof(float));
+    palette_size = 0;
+    palette_pairs = (PalettePair *) wrp_calloc(K_colors + 1, sizeof(PalettePair));
+    prob_c = (float *) wrp_calloc((K_colors + 1) * 2 , sizeof(float)); 
+    prob_c_if_sp = (float *) wrp_calloc((K_colors + 1) * 2 * N_pix, sizeof(float));
     prob_sp = 1.0f/(out_width*out_height); 
 
     buf_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor));
@@ -284,23 +304,25 @@ void PixImage :: initialize(){
         color_sum.b += output_img_lab[p].b;
     }
     // divide all by M_pix
-    color_sum.L = color_sum.L / (float) N_pix;
-    color_sum.a = color_sum.a / (float) N_pix;
-    color_sum.b = color_sum.b / (float) N_pix;
+    color_sum.L = color_sum.L * prob_sp;
+    color_sum.a = color_sum.a * prob_sp;
+    color_sum.b = color_sum.b * prob_sp;
 
     // Store color and update prob to any
-    // helper function -- push new palette color?
-    palette_lab[0] = color_sum;
-    prob_c[0] = 1;
-    palette_size = 1; 
-
-    //TODO: INIT prob_sp
+    pushPaletteColor(color_sum, 0.5f);
+    LabColor majorAxis;
+    float variance;
+    getMajorAxis(0, &variance, &majorAxis);
     
+    color_sum.L += majorAxis.L * kSubclusterPertubation;
+    color_sum.a += majorAxis.a * kSubclusterPertubation;
+    color_sum.b += majorAxis.b * kSubclusterPertubation;
 
-    ///*** Set Temperature Values ***///
-    //TODO: FIX T_C OR SOMETHINGS
-    T = T_c * 1.1f;
+    pushPaletteColor(color_sum, 0.5f);
 
+    pushPalettePair(0, 1);
+
+    T = sqrt(2*variance) * kT0SafetyFactor;
 }
 
 void PixImage :: iterate(){
