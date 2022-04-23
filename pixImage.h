@@ -61,7 +61,7 @@ class PixImage{
     LabColor *palette_lab; //<- palette array with color values in palette
 
     float *prob_c;         //<- array of probabiities that a color in the palette is set to ANY super pixel
-    float *prob_sp;        //<- array of probabiities of each super pixel TODO:EDIT
+    float prob_sp;        //<- array of probabiities of each super pixel TODO:EDIT
     float *prob_c_if_sp;   //<- List of P(c_k|p_s) values for all superpixels
  
     // Temperature
@@ -92,11 +92,15 @@ class PixImage{
      */
     void initSuperPixels();
 
+    void updateSuperPixelMeans();
+
     /**
      * @brief 
      * 
      */
     void iterate();
+
+    void getMajorAxis(int palette_index, float *value, LabColor *vector);
 
     /**
      * @brief 

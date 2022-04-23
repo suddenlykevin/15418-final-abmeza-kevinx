@@ -29,7 +29,7 @@ using namespace std;
 // returns maximum eigenvalue/vector
 //
 // closed-form solution based on https://hal.archives-ouvertes.fr/hal-01501221/document
-int maxEigen3(float *matrix, float *value, float *vector) {
+int maxEigen3(float *matrix, float *value, LabColor *vector) {
     
     // extract unique values from top triangle
     float a = matrix[0];
@@ -71,9 +71,9 @@ int maxEigen3(float *matrix, float *value, float *vector) {
     float v_0 = (lam - c - e*m)/f;
 
     // store associated eigenvector
-    vector[0] = v_0;
-    vector[1] = m;
-    vector[2] = 1.f;
+    vector->L = v_0;
+    vector->a = m;
+    vector->b = 1.f;
 
     return 0;
 }
@@ -206,6 +206,44 @@ void PixImage :: initSuperPixels(){
     }
 }
 
+void PixImage :: updateSuperPixelMeans(){
+    FloatVec sp_sums[N_pix];
+    LabColor color_sums[N_pix];
+    int sp_count[N_pix];
+    // Find the mean colors (from input image) for each superpixel
+    for (int j = 0; j < in_height; j++) {
+        for (int i = 0; i < in_width; i++) {
+            int idx = j*in_width + i;
+            int spidx = superPixel_img[idx];
+            sp_count[spidx] ++;
+            sp_sums[spidx].x += i;
+            sp_sums[spidx].y += j;
+
+            color_sums[spidx].L += input_img_lab[idx].L;
+            color_sums[spidx].a += input_img_lab[idx].a;
+            color_sums[spidx].b += input_img_lab[idx].b;
+        }
+    }
+    
+    // Repostion superpixels and update the output color pallete
+    for (int j = 0; j < out_height; j++) {
+        for (int i = 0; i < out_width; i++) {
+            // Index of superpixel
+            int spidx = j*out_width + i;
+
+            // Calculate new position for super pixel
+            float x = sp_sums[spidx].x / sp_count[spidx];
+            float y = sp_sums[spidx].y / sp_count[spidx];
+            FloatVec newpos = {x, y};
+            superPixel_pos[spidx] = newpos;
+
+            // Set output_img_lab to new mean value
+            output_img_lab[spidx].L = color_sums[spidx].L/sp_count[spidx];
+            output_img_lab[spidx].a = color_sums[spidx].a/sp_count[spidx];
+            output_img_lab[spidx].b = color_sums[spidx].b/sp_count[spidx];
+        }
+    }
+}
 
 void PixImage :: initialize(){
     ///*** Allocate Array Space ***///
@@ -217,7 +255,7 @@ void PixImage :: initialize(){
 
     palette_lab = (LabColor *) wrp_calloc(M_pix, sizeof(float));
     prob_c = (float *) wrp_calloc(K_colors , sizeof(float)); 
-    prob_sp= (float *) wrp_calloc(N_pix , sizeof(float)); 
+    prob_sp = 1.0f/(out_width*out_height); 
 
     buf_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor));
     output_img = (unsigned char *) wrp_malloc(N_pix * 3); 
@@ -231,35 +269,30 @@ void PixImage :: initialize(){
 
     ///*** Initialize Superpixel Values ***///
     initSuperPixels();
-
-
+    updateSuperPixelMeans();
 
     ///*** Initialize Palette Values ***///
     // Find mean of all M_pix color inputs
     LabColor color_sum;
     //add all colors
-    for (int p = 0; p < M_pix; p++) {
-        color_sum.L += input_img_lab[p].L;
-        color_sum.a += input_img_lab[p].a;
-        color_sum.b += input_img_lab[p].b;
+    for (int p = 0; p < N_pix; p++) {
+        color_sum.L += output_img_lab[p].L;
+        color_sum.a += output_img_lab[p].a;
+        color_sum.b += output_img_lab[p].b;
     }
     // divide all by M_pix
-    color_sum.L = color_sum.L / (float) M_pix;
-    color_sum.a = color_sum.a / (float) M_pix;
-    color_sum.b = color_sum.b / (float) M_pix;
-    // update all superpixel color values
-    for (int p = 0; p < N_pix; p++) {
-        output_img_lab[p].L = color_sum.L;
-        output_img_lab[p].a = color_sum.a;
-        output_img_lab[p].b = color_sum.b;
-    }
+    color_sum.L = color_sum.L / (float) N_pix;
+    color_sum.a = color_sum.a / (float) N_pix;
+    color_sum.b = color_sum.b / (float) N_pix;
+
     // Store color and update prob to any
+    // helper function -- push new palette color?
     palette_lab[0] = color_sum;
     prob_c[0] = 1;
     palette_size = 1; 
 
     //TODO: INIT prob_sp
-
+    
 
     ///*** Set Temperature Values ***///
     //TODO: FIX T_C OR SOMETHINGS
@@ -321,48 +354,7 @@ void PixImage :: iterate(){
             }
         }
 
-        ///*** Find the mean colors of superpixels based on pixels it has***///
-        ///*** TODO: WE NEED TO UPDATE THIS WITH PALETTE ***///
-        /* CITE FROM PAPER: However, in our implementation, the color of each superpixel is set to the palette color that is
-            associated with the superpixel (the construction of this mapping is
-            explained in Section 4.3).*/
-        FloatVec *sp_sums = (FloatVec *) calloc(N_pix, sizeof(FloatVec));
-        float *color_sums = (float *) calloc(N_pix * 3, sizeof(float));
-        int *sp_count = (int *) calloc(N_pix, sizeof(int));
-        // Find the mean colors (from input image) for each superpixel
-        for (int j = 0; j < in_height; j++) {
-            for (int i = 0; i < in_width; i++) {
-                int idx = j*in_width + i;
-                int spidx = superPixel_img[idx];
-                sp_count[spidx] ++;
-                sp_sums[spidx].x += i;
-                sp_sums[spidx].y += j;
-
-                color_sums[3*spidx] += input_img_lab[idx].L;
-                color_sums[3*spidx + 1] += input_img_lab[idx].a;
-                color_sums[3*spidx + 2] += input_img_lab[idx].b;
-            }
-        }
-        
-        // Repostion superpixels and update the output color pallete
-        for (int j = 0; j < out_height; j++) {
-            for (int i = 0; i < out_width; i++) {
-                // Index of superpixel
-                int spidx = j*out_width + i;
-
-                // Calcualte new position for super pixel
-                float x = sp_sums[spidx].x / sp_count[spidx];
-                float y = sp_sums[spidx].y / sp_count[spidx];
-                FloatVec newpos = {x, y};
-                superPixel_pos[spidx] = newpos;
-
-                // Set output_img_lab to new mean value
-                output_img_lab[spidx].L = color_sums[3*spidx]/sp_count[spidx];
-                output_img_lab[spidx].a = color_sums[3*spidx + 1]/sp_count[spidx];
-                output_img_lab[spidx].b = color_sums[3*spidx + 2]/sp_count[spidx];
-                
-            }
-        }
+        updateSuperPixelMeans();
 
         // smooth positions
         for (int j = 0; j < out_height; j++) {
@@ -454,9 +446,6 @@ void PixImage :: iterate(){
         }
         //update the SP mean colors with the smoothed values
         memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
-        free(sp_sums);
-        free(color_sums);
-        free(sp_count);
         
         //*** ************************************** ***//
         //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
@@ -549,6 +538,59 @@ void PixImage :: iterate(){
 
 }
 
+void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector) {
+    float covariance[9];
+    memset(covariance, 0, 9*sizeof(float));
+    float sum = 0;
+
+    // compute covariance matrix
+    for (int j = 0; j < out_height; j++) {
+        for (int i = 0; i < out_height; i++) {
+            int idx = j*out_width + i;
+
+            // probability of superpixel given palette color
+            float prob_oc = prob_c_if_sp[palette_index * N_pix + idx] 
+                            * prob_sp / prob_c[palette_index];
+            sum += prob_oc;
+            
+            // find color error with current superpixel
+            LabColor pl_color = palette_lab[palette_index];    
+            LabColor sp_color = output_img_lab[idx];
+            float L_error = abs(pl_color.L - sp_color.L);
+            float a_error = abs(pl_color.a - sp_color.a);
+            float b_error = abs(pl_color.b - sp_color.b);
+
+            // update covariance
+            covariance[0] += prob_oc*L_error*L_error;
+            covariance[1] += prob_oc*a_error*L_error;
+            covariance[2] += prob_oc*b_error*L_error;
+            covariance[3] += prob_oc*L_error*a_error;
+            covariance[4] += prob_oc*a_error*a_error;
+            covariance[5] += prob_oc*b_error*a_error;
+            covariance[6] += prob_oc*L_error*b_error;
+            covariance[7] += prob_oc*a_error*b_error;
+            covariance[8] += prob_oc*b_error*b_error;
+        }
+    }
+
+    LabColor eVec;
+    float eVal;
+
+    int error = maxEigen3(covariance, &eVal, &eVec);
+    if (error < 0) {
+        printf("maxEigen3 special case\n");
+    }
+
+    float len = sqrt(eVec.L*eVec.L + eVec.a*eVec.a + eVec.b*eVec.b);
+    if (len > 0) {
+        eVec.L *= (1.0f/len);
+        eVec.a *= (1.0f/len);
+        eVec.b *= (1.0f/len);
+    }
+
+    *value = eVal;
+    *vector = eVec;
+}
 
 void PixImage :: freeAll(){
 
@@ -562,7 +604,6 @@ void PixImage :: freeAll(){
 
     free(palette_lab); 
     free(prob_c); 
-    free(prob_sp);
 
     free(buf_lab);
 }
