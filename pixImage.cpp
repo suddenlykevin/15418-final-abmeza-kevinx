@@ -466,7 +466,6 @@ void PixImage :: iterate(){
         printf("associate...\n");
         float *distance = (float *)wrp_calloc(M_pix, sizeof(float));
         for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
-        
         for (int j = 0; j < out_height; ++j) {
             for (int i = 0; i < out_width; ++i) {
                 
@@ -775,6 +774,8 @@ void PixImage :: iterate(){
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
             LabColor color = averaged_palette[palette_assign[idx]];
+            color.a *= 1.1f;
+            color.b *= 1.1f;
             lab2rgb(color.L, color.a, color.b, 
                     &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
             // output_img[3*idx] = palette_rgb[palette_assign[idx]].R;

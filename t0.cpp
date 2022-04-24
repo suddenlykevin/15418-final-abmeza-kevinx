@@ -104,7 +104,6 @@ int main(int argc, char** argv) {
 
     // Load input image (always 3 channels)
     input_img = wrp_stbi_load(filename, &width, &height, &channels, 3);
-
   
 
     // Create pixImage object!
