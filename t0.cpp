@@ -122,15 +122,17 @@ int main(int argc, char** argv) {
     pixImage.iterate();
 
     char *out_name;
+    char *spout_name;
     char *input_basename = strtok(filename, ".");
     asprintf(&out_name, "%s_%dx%d_%d.png", input_basename, out_width, out_height, K_colors);
+    asprintf(&spout_name, "%s_%dx%d_%d_sp.png", input_basename, out_width, out_height, K_colors);
 
     //*** ******************** ***//
     //*** PROCESS OUTPUT IMAGE ***//
     //*** ******************** ***//
     // Passed in the correct number of channels, in this case the number desired
     stbi_write_png(out_name, pixImage.out_width, pixImage.out_height, channels, pixImage.output_img, pixImage.out_width * channels);
-    
+    stbi_write_png(spout_name, pixImage.in_width, pixImage.in_height, channels, pixImage.spoutput_img, pixImage.in_width * channels);
     
     //*** ********** ***//
     //*** FREE STUFF ***//

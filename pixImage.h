@@ -58,6 +58,7 @@ class PixImage{
     int out_width, out_height; //<- output version of width, height
     int N_pix;                 //<- # of pixels in the output image (N from paper)
     unsigned char *output_img; //<- output version of input_img
+    unsigned char *spoutput_img; //<- debug output for superpixels
     LabColor *buf_lab;         //<- buffer for smoothing and palette refinement
 
     // Superpixel calculation 

@@ -466,6 +466,7 @@ void PixImage :: iterate(){
         printf("associate...\n");
         float *distance = (float *)wrp_calloc(M_pix, sizeof(float));
         for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
+        
         for (int j = 0; j < out_height; ++j) {
             for (int i = 0; i < out_width; ++i) {
                 
@@ -539,12 +540,12 @@ void PixImage :: iterate(){
                 if(i == 0 || i == out_width -1) {
                     newPos.x = pos.x;
                 } else {
-                    newPos.x = (0.6f)*pos.x + 0.4f*sum.x;
+                    newPos.x = (0.55f)*pos.x + 0.45f*sum.x;
                 }
                 if(j == 0 || j == out_height - 1) {
                     newPos.y = pos.y;
                 } else {
-                    newPos.y = 0.6f*pos.y + 0.4f*sum.y;
+                    newPos.y = 0.55f*pos.y + 0.45f*sum.y;
                 }
                 // printf("pos: (%f, %f) -> (%f, %f)\n", pos.x, pos.y, newPos.x, newPos.y);
                 superPixel_pos[spidx] = newPos;
@@ -754,22 +755,6 @@ void PixImage :: iterate(){
     LabColor averaged_palette[2*K_colors];
     getAveragedPalette(averaged_palette);
 
-    // saturate
-    // for (int i = 0; i < palette_size; i++) {
-    //     averaged_palette[i].a = (fabs(averaged_palette[i].a * 1.1f) < 50.f) ? averaged_palette[i].a * 1.1f: averaged_palette[i].a;
-    //     averaged_palette[i].b = (fabs(averaged_palette[i].b * 1.1f) < 50.f) ? averaged_palette[i].b * 1.1f: averaged_palette[i].b;
-    // }
-    // struct {
-    //     unsigned char R;
-    //     unsigned char G;
-    //     unsigned char B;
-    // } palette_rgb[palette_size];
-
-    // for (int i = 0; i < palette_size; i++) {
-    //     LabColor color = averaged_palette[i];
-    //     lab2rgb(color.L, color.a, color.b, &(palette_rgb[i].R), &(palette_rgb[i].G), &(palette_rgb[i].B));
-    // }
-
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
@@ -781,6 +766,23 @@ void PixImage :: iterate(){
             // output_img[3*idx] = palette_rgb[palette_assign[idx]].R;
             // output_img[3*idx + 1] = palette_rgb[palette_assign[idx]].G;
             // output_img[3*idx + 2] = palette_rgb[palette_assign[idx]].B;
+        }
+    }
+
+    spoutput_img = (unsigned char *) wrp_calloc(M_pix*3, sizeof(unsigned char));
+    for (int j = 0; j < in_height; j++) {
+        for (int i = 0; i < in_width; i++) {
+            int idx = j*in_width + i;
+            if ((region_map[idx]/out_width % 2 == 0 && region_map[idx] % 2 == 0) ||
+                (region_map[idx]/out_width % 2 == 1 && region_map[idx] % 2 == 1)) {
+                spoutput_img[idx*3] = 0;
+                spoutput_img[idx*3 + 1] = 0;
+                spoutput_img[idx*3 + 2] = 0;
+            } else {
+                spoutput_img[idx*3] = 255;
+                spoutput_img[idx*3 + 1] = 255;
+                spoutput_img[idx*3 + 2] = 255;
+            }
         }
     }
 
