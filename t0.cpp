@@ -67,10 +67,16 @@ unsigned char* wrp_stbi_load(char const *filename, int *x_ptr, int *y_ptr, int *
  * 
  * @return int 
  */
-int main(void) {   
+int main(int argc, char** argv) {   
 
     // INITAILZE VARIABLES
     // Input Image 
+    if (argc < 5) {
+        printf("Not enough arguments\n");
+        return 0;
+    }
+
+    
 
     int width, height;        //<- width and height of input_img, gives pixel dimensions
     int channels;             //<- number of channels for input_img (3:rgb or 4:rgba)
@@ -81,20 +87,23 @@ int main(void) {
     //Palette
     int K_colors;          //<- number of colors we aim to use in the pallette
  
-
+    char *filename = argv[1];
+    out_width = atoi(argv[2]);
+    out_height = atoi(argv[3]);
+    K_colors = atoi(argv[4]);
 
     // SET SOME VARIABLES 
     
-    //(TODO: Dynamic through cmdline)
-    out_width = 32; out_height = 32;
-    K_colors = 16;
+    // //(TODO: Dynamic through cmdline)
+    // out_width = 64; out_height = 64;
+    // K_colors = 16;
 
     //*** ******************* ***//
     //*** PROCESS INPUT IMAGE ***//
     //*** ******************* ***//
 
     // Load input image (always 3 channels)
-    input_img = wrp_stbi_load("SonicFlower.jpeg", &width, &height, &channels, 3);
+    input_img = wrp_stbi_load(filename, &width, &height, &channels, 3);
 
   
 
@@ -113,13 +122,15 @@ int main(void) {
 
     pixImage.iterate();
 
-
+    char *out_name;
+    char *input_basename = strtok(filename, ".");
+    asprintf(&out_name, "%s_%dx%d_%d.png", input_basename, out_width, out_height, K_colors);
 
     //*** ******************** ***//
     //*** PROCESS OUTPUT IMAGE ***//
     //*** ******************** ***//
     // Passed in the correct number of channels, in this case the number desired
-    stbi_write_jpg("SonicFlower_output.jpeg", pixImage.out_width, pixImage.out_height, channels, pixImage.output_img, 100);
+    stbi_write_png(out_name, pixImage.out_width, pixImage.out_height, channels, pixImage.output_img, pixImage.out_width * channels);
     
     
     //*** ********** ***//

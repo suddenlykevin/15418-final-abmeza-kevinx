@@ -337,10 +337,10 @@ void PixImage :: condensePalette() {
     float new_prob_c[K_colors * 2];
     float new_prob_c_if_sp[K_colors * 2 * N_pix];
     int new_palette_assign[N_pix];
-    // printf("averaging... %d\n", palette_size);
+    printf("averaging... %d\n", palette_size);
     getAveragedPalette(average_palette);
 
-    // printf("averaged...\n");
+    printf("averaged...\n");
     // for each pair, condense to average
     for(int j = 0; j < palette_size >> 1; ++j) {
         int index_a = palette_pairs[j].a;
@@ -366,6 +366,7 @@ void PixImage :: condensePalette() {
     // TODO: could be wrong?? wtf is prob_oc_
     memcpy(prob_c_if_sp, new_prob_c_if_sp, K_colors * 2 * N_pix * sizeof(float));
 
+    palette_size = K_colors;
     palette_complete = true;
 }
 
@@ -681,7 +682,7 @@ void PixImage :: iterate(){
         //*** (4.3) EXPAND PALETTE ***//
         //*** ******************** ***//
         
-        printf("expand... %f\n", palette_error);
+        printf("expand...\n");
         if (palette_error < kPaletteErrorTolerance) {
             // check for convergence, lower temperature
             if (T <= kTF) {
@@ -689,7 +690,7 @@ void PixImage :: iterate(){
             } else {
                 T = std::max(T*kDT, kTF);
             }
-
+            
             // if palette is incomplete
             if (!palette_complete) {
                 int splits[K_colors];
@@ -745,23 +746,36 @@ void PixImage :: iterate(){
     //*** ******************** ***//
     //*** PROCESS OUTPUT IMAGE ***//
     //*** ******************** ***//
-
+    // palette_complete = false;
     // Create output image in rgb color values
     LabColor averaged_palette[2*K_colors];
     getAveragedPalette(averaged_palette);
 
     // saturate
     // for (int i = 0; i < palette_size; i++) {
-    //     averaged_palette[i].a *= 1.1f;
-    //     averaged_palette[i].b *= 1.1f;
+    //     averaged_palette[i].a = (fabs(averaged_palette[i].a * 1.1f) < 50.f) ? averaged_palette[i].a * 1.1f: averaged_palette[i].a;
+    //     averaged_palette[i].b = (fabs(averaged_palette[i].b * 1.1f) < 50.f) ? averaged_palette[i].b * 1.1f: averaged_palette[i].b;
     // }
-    
+    // struct {
+    //     unsigned char R;
+    //     unsigned char G;
+    //     unsigned char B;
+    // } palette_rgb[palette_size];
+
+    // for (int i = 0; i < palette_size; i++) {
+    //     LabColor color = averaged_palette[i];
+    //     lab2rgb(color.L, color.a, color.b, &(palette_rgb[i].R), &(palette_rgb[i].G), &(palette_rgb[i].B));
+    // }
+
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
             LabColor color = averaged_palette[palette_assign[idx]];
             lab2rgb(color.L, color.a, color.b, 
                     &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
+            // output_img[3*idx] = palette_rgb[palette_assign[idx]].R;
+            // output_img[3*idx + 1] = palette_rgb[palette_assign[idx]].G;
+            // output_img[3*idx + 2] = palette_rgb[palette_assign[idx]].B;
         }
     }
 
