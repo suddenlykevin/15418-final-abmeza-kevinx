@@ -87,7 +87,7 @@ int main(void) {
     
     //(TODO: Dynamic through cmdline)
     out_width = 32; out_height = 32;
-    K_colors = 8;
+    K_colors = 16;
 
     //*** ******************* ***//
     //*** PROCESS INPUT IMAGE ***//

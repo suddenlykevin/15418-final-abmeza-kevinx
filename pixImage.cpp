@@ -337,8 +337,10 @@ void PixImage :: condensePalette() {
     float new_prob_c[K_colors * 2];
     float new_prob_c_if_sp[K_colors * 2 * N_pix];
     int new_palette_assign[N_pix];
+    printf("averaging... %d\n", palette_size);
     getAveragedPalette(average_palette);
 
+    printf("averaged...\n");
     // for each pair, condense to average
     for(int j = 0; j < palette_size >> 1; ++j) {
         int index_a = palette_pairs[j].a;
@@ -363,6 +365,8 @@ void PixImage :: condensePalette() {
     
     // TODO: could be wrong?? wtf is prob_oc_
     memcpy(prob_c_if_sp, new_prob_c_if_sp, K_colors * 2 * N_pix * sizeof(float));
+
+    palette_complete = true;
 }
 
 void PixImage :: initialize(){
@@ -372,7 +376,7 @@ void PixImage :: initialize(){
     superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
     region_map = (int *) wrp_calloc(M_pix, sizeof(int));
 
-    palette_lab = (LabColor *) wrp_calloc(K_colors * 2 , sizeof(float));
+    palette_lab = (LabColor *) wrp_calloc(K_colors * 2 , sizeof(LabColor));
     palette_size = 0;
     palette_pairs = (PalettePair *) wrp_calloc(K_colors, sizeof(PalettePair));
     palette_assign = (int *) wrp_calloc(N_pix, sizeof(int));
@@ -395,7 +399,8 @@ void PixImage :: initialize(){
 
     ///*** Initialize Palette Values ***///
     // Find mean of all M_pix color inputs
-    LabColor color_sum;
+    LabColor color_sum = {0.f, 0.f, 0.f};
+
     //add all colors
     for (int p = 0; p < N_pix; p++) {
         color_sum.L += sp_mean_lab[p].L;
@@ -442,7 +447,7 @@ void PixImage :: iterate(){
 
     // update superpixel segments
     while (!converged && iter < maxIter) {
-        printf("iter %d\n", iter);
+        printf("iter %d, %f\n", iter, T);
 
         //*** ************************ ***//
         //*** (4.2) REFINE SUPERPIXELS ***//
@@ -619,9 +624,9 @@ void PixImage :: iterate(){
                 //  - (|| m_s' - c_k ||/T)
                 float pow_val = -1.0f*(norm_val/T);
                 float prob = prob_c[c] * exp(pow_val);
-
-                probs[c] = prob_c_if_sp[c*(N_pix) + p];
-                sum_prob += prob_c_if_sp[c*(N_pix) + p];
+                
+                probs[c] = prob;
+                sum_prob += prob;
 
                 //Update if better value
                 if (best_c < 0 || norm_val < best_norm_val){
@@ -679,7 +684,7 @@ void PixImage :: iterate(){
         printf("expand...\n");
         if (palette_error < kPaletteErrorTolerance) {
             // check for convergence, lower temperature
-            if (T < kTF) {
+            if (T <= kTF) {
                 converged = true;
             } else {
                 T = std::max(T*kDT, kTF);
@@ -690,14 +695,14 @@ void PixImage :: iterate(){
                 int splits[K_colors];
                 int curr = 0;
                 for (int i = 0; i < palette_size >> 1; i++) {
-                    printf("(%d, %d)\n", palette_pairs[i].a, palette_pairs[i].b);
+                    // printf("(%d, %d)\n", palette_pairs[i].a, palette_pairs[i].b);
                     LabColor color_a = palette_lab[palette_pairs[i].a];
                     LabColor color_b = palette_lab[palette_pairs[i].b];
 
                     float error = sqrt(pow(color_a.L-color_b.L, 2.0f) + 
                                   pow(color_a.a-color_b.a, 2.0f) + 
                                   pow(color_a.b-color_b.b, 2.0f));
-                    printf("%f, (%f, %f, %f), (%f, %f, %f)\n", error, color_a.L,color_a.a,color_a.b, color_b.L, color_b.a, color_b.b);
+                    // printf("%f, (%f, %f, %f), (%f, %f, %f)\n", error, color_a.L,color_a.a,color_a.b, color_b.L, color_b.a, color_b.b);
                     // determine if split or simply perturb 
                     if (error > kSubclusterTolerance) {
                         splits[curr] = i;
@@ -709,7 +714,7 @@ void PixImage :: iterate(){
                         color_b.L += majorAxis.L * kSubclusterPertubation;
                         color_b.a += majorAxis.a * kSubclusterPertubation;
                         color_b.b += majorAxis.b * kSubclusterPertubation;
-                        printf("perturbed by: (%f, %f, %f)\n", majorAxis.L, majorAxis.a, majorAxis.b);
+                        // printf("perturbed by: (%f, %f, %f)\n", majorAxis.L, majorAxis.a, majorAxis.b);
 
                         palette_lab[palette_pairs[i].b] = color_b;
                     }
@@ -717,7 +722,7 @@ void PixImage :: iterate(){
 
                 // should sort splits by distance here.
                 if (curr > 0) {
-                    printf("expanding...\n");
+                    printf("expanding... %d, %d\n", palette_size, curr);
                 }
 
                 for (int i = 0; i < curr; i++) {
@@ -725,6 +730,7 @@ void PixImage :: iterate(){
 
                     // if full, seal palette
                     if (palette_size >= 2 * K_colors) {
+                        printf("COMPLETE\n");
                         condensePalette();
                         break;
                     }
@@ -741,10 +747,19 @@ void PixImage :: iterate(){
     //*** ******************** ***//
 
     // Create output image in rgb color values
+    LabColor averaged_palette[2*K_colors];
+    getAveragedPalette(averaged_palette);
+
+    // saturate
+    // for (int i = 0; i < palette_size; i++) {
+    //     averaged_palette[i].a = (fabs(averaged_palette[i].a * 1.1f) < 50.f) ? averaged_palette[i].a * 1.1f: averaged_palette[i].a;
+    //     averaged_palette[i].b = (fabs(averaged_palette[i].b * 1.1f) < 50.f) ? averaged_palette[i].b * 1.1f: averaged_palette[i].b;
+    // }
+    
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
-            LabColor color = palette_lab[palette_assign[idx]];
+            LabColor color = averaged_palette[palette_assign[idx]];
             lab2rgb(color.L, color.a, color.b, 
                     &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
         }
@@ -756,6 +771,7 @@ void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector)
     float covariance[9];
     memset(covariance, 0, 9*sizeof(float));
     float sum = 0;
+    // printf("fsds %d, %f, %f\n", palette_index, prob_sp, prob_c[palette_index]);
 
     // compute covariance matrix
     for (int j = 0; j < out_height; j++) {

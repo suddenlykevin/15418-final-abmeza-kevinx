@@ -22,7 +22,7 @@ const float kPaletteErrorTolerance = 1.0f;
 const float kTF = 1.0f;
 const float kDT = .7f;
 const float kSubclusterTolerance = 1.6f;
-const int maxIter = 10;
+const int maxIter = 1000;
 
 /**
  * @brief position vector data structure
