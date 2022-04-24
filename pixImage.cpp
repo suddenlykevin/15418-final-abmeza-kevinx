@@ -337,10 +337,10 @@ void PixImage :: condensePalette() {
     float new_prob_c[K_colors * 2];
     float new_prob_c_if_sp[K_colors * 2 * N_pix];
     int new_palette_assign[N_pix];
-    printf("averaging... %d\n", palette_size);
+    // printf("averaging... %d\n", palette_size);
     getAveragedPalette(average_palette);
 
-    printf("averaged...\n");
+    // printf("averaged...\n");
     // for each pair, condense to average
     for(int j = 0; j < palette_size >> 1; ++j) {
         int index_a = palette_pairs[j].a;
@@ -570,11 +570,11 @@ void PixImage :: iterate(){
                 for(int jj = min_y; jj<=max_y; ++jj) {
                 
                 LabColor c_n = sp_mean_lab[jj*out_width + ii];
-                float d_color = (float) (pow(superpixel_color.L - c_n.L, 2.f) +
+                float d_color = (float) sqrt(pow(superpixel_color.L - c_n.L, 2.f) +
                                              pow(superpixel_color.a - c_n.a, 2.f) +
                                              pow(superpixel_color.b - c_n.b, 2.f));
                 float w_color = gaussian(d_color, 2.0f ,0.0f);
-                float d_pos = (float) (pow(i-ii, 2.f) + pow(j-jj, 2.f));
+                float d_pos = (float) sqrt(pow(i-ii, 2.f) + pow(j-jj, 2.f));
                 float w_pos = gaussian(d_pos, 0.97f, 0.0f);
                 float w_total = w_color*w_pos;
 
@@ -681,7 +681,7 @@ void PixImage :: iterate(){
         //*** (4.3) EXPAND PALETTE ***//
         //*** ******************** ***//
         
-        printf("expand...\n");
+        printf("expand... %f\n", palette_error);
         if (palette_error < kPaletteErrorTolerance) {
             // check for convergence, lower temperature
             if (T <= kTF) {
@@ -689,7 +689,7 @@ void PixImage :: iterate(){
             } else {
                 T = std::max(T*kDT, kTF);
             }
-            
+
             // if palette is incomplete
             if (!palette_complete) {
                 int splits[K_colors];
@@ -752,8 +752,8 @@ void PixImage :: iterate(){
 
     // saturate
     // for (int i = 0; i < palette_size; i++) {
-    //     averaged_palette[i].a = (fabs(averaged_palette[i].a * 1.1f) < 50.f) ? averaged_palette[i].a * 1.1f: averaged_palette[i].a;
-    //     averaged_palette[i].b = (fabs(averaged_palette[i].b * 1.1f) < 50.f) ? averaged_palette[i].b * 1.1f: averaged_palette[i].b;
+    //     averaged_palette[i].a *= 1.1f;
+    //     averaged_palette[i].b *= 1.1f;
     // }
     
     for (int j = 0; j < out_height; j++) {
