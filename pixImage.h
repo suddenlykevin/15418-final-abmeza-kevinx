@@ -18,6 +18,12 @@ const float T_f = 1.0f; //<- T final, dictates when we finish our core algorithm
 const int m_gerstner = 45; //<- 
 const float kSubclusterPertubation = .8f; //<- amount to perturb subcluster of each palette color
 const float kT0SafetyFactor = 1.1f; //<- initial temperature is 1.1*T_c
+const float kPaletteErrorTolerance = 1.0f;
+const float kTF = 1.0f;
+const float kDT = .7f;
+const float kSubclusterTolerance = 1.6f;
+const int maxIter = 10;
+
 /**
  * @brief position vector data structure
  */
@@ -65,11 +71,12 @@ class PixImage{
     PalettePair *palette_pairs;
     int *palette_assign; //<- palette assignment for each superpixel
     LabColor *palette_lab; //<- palette array with color values in palette
+    bool palette_complete;
 
     float *prob_c;         //<- array of probabiities that a color in the palette is set to ANY super pixel
     float prob_sp;        //<- array of probabiities of each super pixel TODO:EDIT
     float *prob_c_if_sp;   //<- List of P(c_k|p_s) values for all superpixels
- 
+    
     // Temperature
     float T;   //<- Current temperature
     
@@ -113,6 +120,10 @@ class PixImage{
     void iterate();
 
     void getMajorAxis(int palette_index, float *value, LabColor *vector);
+
+    void splitColor(int pair_index);
+
+    void condensePalette();
 
     /**
      * @brief 

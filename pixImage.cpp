@@ -60,6 +60,7 @@ int maxEigen3(float *matrix, float *value, LabColor *vector) {
 
     // unlikely special case causes divide by zero
     if (f == 0 || f*(b-lam)-d*e == 0) {
+        printf("(f: %f, b: %f, lam: %f, d: %f, e: %f)\n", f, b, lam, d, e);
         return -1;
     }
 
@@ -161,6 +162,8 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
     // Get value for number of pixels
     M_pix = in_width * in_height;
     N_pix = out_width * out_height;
+
+    palette_complete = false;
 }
 
 
@@ -251,22 +254,23 @@ void PixImage :: updateSuperPixelMeans(){
 void PixImage :: pushPaletteColor(LabColor color, float prob) {
     palette_lab[palette_size] = color;
     prob_c[palette_size] = prob;
-    for (int idx = 0; idx < N_pix; idx ++) {
-        prob_c_if_sp[palette_size*N_pix + idx] = prob;
-    }
     palette_size ++; 
 }
 
 void PixImage :: pushPalettePair(int a, int b) {
     PalettePair newPair = {a, b};
     int idx = (palette_size >> 1) - 1;
-    if (idx < 0 || idx > K_colors + 1) {
+    if (idx < 0 || idx > K_colors) {
         return;
     }
     palette_pairs[idx] = newPair;
 }
 
 void PixImage :: getAveragedPalette(LabColor *avg_palette) {
+    if (palette_complete) {
+        memcpy(avg_palette, palette_lab, palette_size*sizeof(LabColor));
+        return;
+    }
     for (int i = 0; i < palette_size >> 1; i++) {
         PalettePair pair = palette_pairs[i];
         float weight_a = prob_c[pair.a];
@@ -287,6 +291,80 @@ void PixImage :: getAveragedPalette(LabColor *avg_palette) {
     }
 }
 
+void PixImage :: splitColor(int pair_index) {
+    int index_a = palette_pairs[pair_index].a;
+    int index_b = palette_pairs[pair_index].b;
+
+    int next_a = palette_size;
+    int next_b = next_a + 1;
+
+    // perturb a
+    LabColor color_a = palette_lab[index_a];
+    LabColor color_a_b = color_a;
+    LabColor majorAxis;
+    float variance;
+    getMajorAxis(index_a, &variance, &majorAxis);
+    color_a_b.L += majorAxis.L * kSubclusterPertubation;
+    color_a_b.a += majorAxis.a * kSubclusterPertubation;
+    color_a_b.b += majorAxis.b * kSubclusterPertubation;
+    
+    // reconstruct pair a and copy probabilities
+    prob_c[index_a] *= 0.5f;
+    pushPaletteColor(color_a_b, prob_c[index_a]);
+    int index_a_b = palette_size - 1;
+    memcpy(&prob_c_if_sp[index_a_b*N_pix], &prob_c_if_sp[index_a*N_pix], N_pix*sizeof(float));
+    palette_pairs[pair_index].b = index_a_b;
+
+    // perturb b
+    LabColor color_b = palette_lab[index_b];
+    LabColor color_b_b = color_b;
+    getMajorAxis(index_b, &variance, &majorAxis);
+    color_b_b.L += majorAxis.L * kSubclusterPertubation;
+    color_b_b.a += majorAxis.a * kSubclusterPertubation;
+    color_b_b.b += majorAxis.b * kSubclusterPertubation;
+
+    // reconstruct pair b and copy probabilities
+    prob_c[index_b] *= 0.5f;
+    pushPaletteColor(color_b_b, prob_c[index_b]);
+    int index_b_b = palette_size - 1;
+    memcpy(&prob_c_if_sp[index_b_b*N_pix], &prob_c_if_sp[index_b*N_pix], N_pix*sizeof(float));
+    pushPalettePair(index_b, index_b_b);
+}
+
+void PixImage :: condensePalette() {
+    LabColor average_palette[K_colors * 2];
+    LabColor new_palette[K_colors * 2];
+    float new_prob_c[K_colors * 2];
+    float new_prob_c_if_sp[K_colors * 2 * N_pix];
+    int new_palette_assign[N_pix];
+    getAveragedPalette(average_palette);
+
+    // for each pair, condense to average
+    for(int j = 0; j < palette_size >> 1; ++j) {
+        int index_a = palette_pairs[j].a;
+        int index_b = palette_pairs[j].b;
+        new_palette[j] = average_palette[index_a];
+        //update the probability of the single superpixel
+        new_prob_c[j] = prob_c[index_a] + 
+                        prob_c[index_b];
+
+        // reassign superpixels
+        for(int i = 0; i < N_pix; i++) {
+            new_prob_c_if_sp[j*N_pix + i] = prob_c_if_sp[index_a*N_pix + i];
+            if (palette_assign[i] == index_a || palette_assign[i] == index_b) {
+                new_palette_assign[i] = j;
+            }
+        }
+    }
+
+    // copy new values
+    memcpy(palette_lab, new_palette, K_colors * 2 * sizeof(LabColor));
+    memcpy(palette_assign, new_palette_assign, N_pix * sizeof(int));
+    
+    // TODO: could be wrong?? wtf is prob_oc_
+    memcpy(prob_c_if_sp, new_prob_c_if_sp, K_colors * 2 * N_pix * sizeof(float));
+}
+
 void PixImage :: initialize(){
     ///*** Allocate Array Space ***///
     input_img_lab = (LabColor *) wrp_calloc(M_pix, sizeof(LabColor));
@@ -294,12 +372,12 @@ void PixImage :: initialize(){
     superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
     region_map = (int *) wrp_calloc(M_pix, sizeof(int));
 
-    palette_lab = (LabColor *) wrp_calloc((K_colors + 1) * 2 , sizeof(float));
+    palette_lab = (LabColor *) wrp_calloc(K_colors * 2 , sizeof(float));
     palette_size = 0;
-    palette_pairs = (PalettePair *) wrp_calloc(K_colors + 1, sizeof(PalettePair));
+    palette_pairs = (PalettePair *) wrp_calloc(K_colors, sizeof(PalettePair));
     palette_assign = (int *) wrp_calloc(N_pix, sizeof(int));
-    prob_c = (float *) wrp_calloc((K_colors + 1) * 2 , sizeof(float)); 
-    prob_c_if_sp = (float *) wrp_calloc((K_colors + 1) * 2 * N_pix, sizeof(float));
+    prob_c = (float *) wrp_calloc(K_colors * 2 , sizeof(float)); 
+    prob_c_if_sp = (float *) wrp_calloc(K_colors * 2 * N_pix, sizeof(float));
     prob_sp = 1.0f/(out_width*out_height); 
 
     buf_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor));
@@ -329,8 +407,13 @@ void PixImage :: initialize(){
     color_sum.a = color_sum.a * prob_sp;
     color_sum.b = color_sum.b * prob_sp;
 
+    printf("color_init: (%f, %f, %f)\n", color_sum.L, color_sum.a, color_sum.b);
+
     // Store color and update prob to any
     pushPaletteColor(color_sum, 0.5f);
+    for (int idx = 0; idx < N_pix; idx ++) {
+        prob_c_if_sp[idx] = 0.5f;
+    }
     LabColor majorAxis;
     float variance;
     getMajorAxis(0, &variance, &majorAxis);
@@ -340,6 +423,9 @@ void PixImage :: initialize(){
     color_sum.b += majorAxis.b * kSubclusterPertubation;
 
     pushPaletteColor(color_sum, 0.5f);
+    for (int idx = 0; idx < N_pix; idx ++) {
+        prob_c_if_sp[N_pix + idx] = 0.5f;
+    }
 
     pushPalettePair(0, 1);
 
@@ -351,8 +437,12 @@ void PixImage :: iterate(){
     // Size of super pixel on input image
     float S = sqrt(((float) (M_pix))/((float) (N_pix)));
 
+    bool converged = false;
+    int iter = 0;
+
     // update superpixel segments
-    for (int iter = 0; iter < 35; ++iter) {
+    while (!converged && iter < maxIter) {
+        printf("iter %d\n", iter);
 
         //*** ************************ ***//
         //*** (4.2) REFINE SUPERPIXELS ***//
@@ -363,7 +453,7 @@ void PixImage :: iterate(){
         //*** ************************ ***//
 
         ///*** Update boundaries of pixels assosiated with super pixels ***///
-        LabColor average_palette[(K_colors + 1)*2];
+        LabColor average_palette[K_colors*2];
         getAveragedPalette(average_palette);
 
         float distance[M_pix];
@@ -496,87 +586,154 @@ void PixImage :: iterate(){
             }
         }
 
-        
-        printf("smoothed colors\n");
         //update the SP mean colors with the smoothed values
         memcpy(sp_mean_lab, buf_lab, N_pix * sizeof(LabColor));
-        
-        printf("memcpy\n");
         
         //*** ************************************** ***//
         //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
         //*** ************************************** ***//
-        // List of P(c_k|p_s) values for all superpixels
-        // prob_c_if_sp = (float *) wrp_calloc(N_pix*K_colors, sizeof(float));   
-        // // Update superpixel colors from color palette based on P(c_k|p_s) calculation
-        // for(int p = 0; p < N_pix; p++) {
-        //     // Get the best color value to update the superpixel color
-        //     int best_c = -1;
-        //     float best_norm_val = 0.0f;
-        //     for (int c = 0; c < palette_size; c++){
-        //         // m_s' - c_k TODO: MIGHT NOT WORK?
-        //         LabColor pixDiff;
-        //         pixDiff.L = output_img_lab[p].L - palette_lab[c].L;
-        //         pixDiff.a = output_img_lab[p].a - palette_lab[c].a;
-        //         pixDiff.b = output_img_lab[p].b - palette_lab[c].b;
 
-        //         // || m_s' - c_k ||
-        //         float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
+        printf("associate...\n");
+        float new_prob_c[palette_size];
+        memset(new_prob_c, 0, palette_size*sizeof(float));
+        memset(prob_c_if_sp, 0, K_colors * 2 * N_pix *sizeof(float));
+        // Update superpixel colors from color palette based on P(c_k|p_s) calculation
+        for(int p = 0; p < N_pix; p++) {
+            // Get the best color value to update the superpixel color
+            int best_c = -1;
+            float best_norm_val = 0.0f;
+            double probs[palette_size];
+            double sum_prob = 0;
 
-        //         //  - (|| m_s' - c_k ||/T)
-        //         float pow_val = -1.0f*(norm_val/T);
-        //         prob_c_if_sp[c + (p*K_colors)] = prob_c[c] * exp(pow_val);
-        //         //Update if better value
-        //         if (best_c == -1 || norm_val < best_norm_val){
-        //             best_c = c;
-        //             best_norm_val = norm_val;
-        //         }
-        //     } 
-        //     // Store values to update output_img_lab to best pixel value
-        //     buf_lab[p] = palette_lab[best_c];
-        // }
+            for (int c = 0; c < palette_size; c++){
 
-        // // Update to probability color is assosiated to ANY superpixel (P(c_k))
-        // // TODO: OPTIMIZATION EXISTS WHERE PREVIOUS LOOPS IS MIXED WITH THIS LOOP
-        // for (int c = 0; c < palette_size; c++){
-        //     prob_c[c] = 0.0f;
-        //     for (int p = 0; p < N_pix; p++){
-        //         prob_c[c] = prob_c[c] + prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
-        //     }
-        // }
+                // m_s' - c_k TODO: MIGHT NOT WORK?
+                LabColor pixDiff;
+                pixDiff.L = sp_mean_lab[p].L - palette_lab[c].L;
+                pixDiff.a = sp_mean_lab[p].a - palette_lab[c].a;
+                pixDiff.b = sp_mean_lab[p].b - palette_lab[c].b;
 
+                // || m_s' - c_k ||
+                float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
 
-        // //update the SP colors wiht updated values
-        // memcpy(output_img_lab, buf_lab, N_pix * sizeof(LabColor));
+                //  - (|| m_s' - c_k ||/T)
+                float pow_val = -1.0f*(norm_val/T);
+                float prob = prob_c[c] * exp(pow_val);
+
+                probs[c] = prob_c_if_sp[c*(N_pix) + p];
+                sum_prob += prob_c_if_sp[c*(N_pix) + p];
+
+                //Update if better value
+                if (best_c < 0 || norm_val < best_norm_val){
+                    best_c = c;
+                    best_norm_val = norm_val;
+                }
+            } 
+
+            // update palette assignment
+            palette_assign[p] = best_c;
+
+            for(int c = 0; c < palette_size; c++) {
+                double p_norm = probs[c]/sum_prob;
+                prob_c_if_sp[c*(N_pix) + p] = p_norm;
+                new_prob_c[c] += prob_sp*p_norm;
+            }
+        }
+
+        // update color probabilities
+        memcpy(prob_c, new_prob_c, palette_size*sizeof(float));
         
         // //*** ******************** ***//
         // //*** (4.3) REFINE PALETTE ***//
         // //*** ******************** ***//
 
-        // //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
-        // for (int c = 0; c< palette_size; c++){
+        printf("refine...\n");
+        float palette_error = 0.f;
+        //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
+        for (int c = 0; c< palette_size; c++){
 
-        //     LabColor c_sum = {0.0f,0.0f,0.0f};
-        //     // Observe all superpixels to get sum of equation
-        //     for (int p = 0; p < N_pix; p++){
-        //         c_sum.L = c_sum.L + output_img_lab[p].L * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
-        //         c_sum.a = c_sum.a + output_img_lab[p].a * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
-        //         c_sum.b = c_sum.b + output_img_lab[p].b * prob_c_if_sp[c + (p*K_colors)] * prob_sp[p];
-        //     }
+            LabColor c_sum = {0.0f,0.0f,0.0f};
+            // Observe all superpixels to get sum of equation
+            for (int p = 0; p < N_pix; p++){
+                c_sum.L += sp_mean_lab[p].L * prob_c_if_sp[c*N_pix + p] * prob_sp;
+                c_sum.a += sp_mean_lab[p].a * prob_c_if_sp[c*N_pix + p] * prob_sp;
+                c_sum.b += sp_mean_lab[p].b * prob_c_if_sp[c*N_pix + p] * prob_sp;
+            }
+            
+            if (prob_c[c] > 0) {
+                LabColor last = palette_lab[c];
+                //Update palette color
+                palette_lab[c].L = c_sum.L/prob_c[c];
+                palette_lab[c].a = c_sum.a/prob_c[c];
+                palette_lab[c].b = c_sum.b/prob_c[c];
+                LabColor curr = palette_lab[c];
 
-        //     //Update palette color
-        //     palette_lab[c].L = c_sum.L/prob_c[c];
-        //     palette_lab[c].a = c_sum.a/prob_c[c];
-        //     palette_lab[c].b = c_sum.b/prob_c[c];
+                palette_error += sqrt(pow(last.L-curr.L, 2.0f) + pow(last.a-curr.a, 2.0f) + pow(last.b-curr.b, 2.0f));
+            }
+        }
 
-        // }
-
-        // free(prob_c_if_sp);
         //*** ******************** ***//
         //*** (4.3) EXPAND PALETTE ***//
         //*** ******************** ***//
-    
-}
+        
+        printf("expand...\n");
+        if (palette_error < kPaletteErrorTolerance) {
+            // check for convergence, lower temperature
+            if (T < kTF) {
+                converged = true;
+            } else {
+                T = std::max(T*kDT, kTF);
+            }
+            
+            // if palette is incomplete
+            if (!palette_complete) {
+                int splits[K_colors];
+                int curr = 0;
+                for (int i = 0; i < palette_size >> 1; i++) {
+                    printf("(%d, %d)\n", palette_pairs[i].a, palette_pairs[i].b);
+                    LabColor color_a = palette_lab[palette_pairs[i].a];
+                    LabColor color_b = palette_lab[palette_pairs[i].b];
+
+                    float error = sqrt(pow(color_a.L-color_b.L, 2.0f) + 
+                                  pow(color_a.a-color_b.a, 2.0f) + 
+                                  pow(color_a.b-color_b.b, 2.0f));
+                    printf("%f, (%f, %f, %f), (%f, %f, %f)\n", error, color_a.L,color_a.a,color_a.b, color_b.L, color_b.a, color_b.b);
+                    // determine if split or simply perturb 
+                    if (error > kSubclusterTolerance) {
+                        splits[curr] = i;
+                        curr ++;
+                    } else {
+                        float value;
+                        LabColor majorAxis;
+                        getMajorAxis(palette_pairs[i].a, &value, &majorAxis);
+                        color_b.L += majorAxis.L * kSubclusterPertubation;
+                        color_b.a += majorAxis.a * kSubclusterPertubation;
+                        color_b.b += majorAxis.b * kSubclusterPertubation;
+                        printf("perturbed by: (%f, %f, %f)\n", majorAxis.L, majorAxis.a, majorAxis.b);
+
+                        palette_lab[palette_pairs[i].b] = color_b;
+                    }
+                }
+
+                // should sort splits by distance here.
+                if (curr > 0) {
+                    printf("expanding...\n");
+                }
+
+                for (int i = 0; i < curr; i++) {
+                    splitColor(splits[i]);
+
+                    // if full, seal palette
+                    if (palette_size >= 2 * K_colors) {
+                        condensePalette();
+                        break;
+                    }
+                }
+            }
+        }
+
+        iter ++;
+    }
     
 
     //*** ******************** ***//
@@ -587,7 +744,8 @@ void PixImage :: iterate(){
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
-            lab2rgb(sp_mean_lab[idx].L, sp_mean_lab[idx].a, sp_mean_lab[idx].b, 
+            LabColor color = palette_lab[palette_assign[idx]];
+            lab2rgb(color.L, color.a, color.b, 
                     &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
         }
     }
@@ -608,7 +766,7 @@ void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector)
             float prob_oc = prob_c_if_sp[palette_index * N_pix + idx] 
                             * prob_sp / prob_c[palette_index];
             sum += prob_oc;
-            
+
             // find color error with current superpixel
             LabColor pl_color = palette_lab[palette_index];    
             LabColor sp_color = sp_mean_lab[idx];
