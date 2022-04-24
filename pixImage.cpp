@@ -459,12 +459,14 @@ void PixImage :: iterate(){
         //*** ************************ ***//
 
         ///*** Update boundaries of pixels assosiated with super pixels ***///
+        printf("average...\n");
         LabColor average_palette[K_colors*2];
         getAveragedPalette(average_palette);
 
-        float distance[M_pix];
+        printf("associate...\n");
+        float *distance = (float *)wrp_calloc(M_pix, sizeof(float));
         for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
-
+        
         for (int j = 0; j < out_height; ++j) {
             for (int i = 0; i < out_width; ++i) {
                 
@@ -501,8 +503,10 @@ void PixImage :: iterate(){
             }
         }
 
+        printf("update means...\n");
         updateSuperPixelMeans();
 
+        printf("smooth...\n");
         // smooth positions
         for (int j = 0; j < out_height; j++) {
             for (int i = 0; i < out_width; i++) {                
