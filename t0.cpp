@@ -1,11 +1,9 @@
 /**
  * @file t0.cpp
- * @authors Kevin Xie () 
+ * @authors Kevin Xie (kevinx) 
  *          Anthony Meza (abmeza)
  * 
- * @brief  This has been taken from an online tutorial to figure out how to use
- *         stb_image files for our project. Link found: 
- *         https://solarianprogrammer.com/2019/06/10/c-programming-reading-writing-images-stb_image-libraries/
+ * @brief  main file for out project
  * @version 0.1
  * @date 2022-04-09
  * 
@@ -17,6 +15,7 @@
  * 
  */
 
+#define TIMING // Calculate and print timing information
 
 #include "pixImage.h"
 
@@ -30,13 +29,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <algorithm> 
 #include <stack>
 
 
 
 //*************************************************************//
-//**************** WRAPPER HELPER FUNCTIONS *******************//
+//**************** WRAPPER/HELPER FUNCTIONS *******************//
 //*************************************************************//
 
 /**
@@ -59,49 +59,90 @@ unsigned char* wrp_stbi_load(char const *filename, int *x_ptr, int *y_ptr, int *
 }
 
 
+/**
+ * @brief Prints out how to input values into the command line
+ *        Most of code borrowed from 15418 assignments
+ */
+void usage(const char *progname){
+    printf("Usage: %s [options] scenename\n", progname);
+    printf("Program Inputs:\n");
+    printf("  -f  --filename   <FILENAME>  name of image file being inputted to be pixelated\n");
+    printf("  -x  --out_width  <INT>       pixel width of output image\n");
+    printf("  -y  --out_height <INT>       pixel height of output image\n");
+    printf("  -k  --K_COLORS   <INT>       colors present in the output image\n");
+    printf("Program Options:\n");
+    printf("  -?  --help                   open this usage help page\n");
+}
+
+
 //*************************************************************//
 //************************ MAIN CODE **************************//
 //*************************************************************//
 
-/**
- * @brief 
- * 
- * @return int 
- */
 int main(int argc, char** argv) {   
 
-    // INITAILZE VARIABLES
-    // Input Image 
-    if (argc < 5) {
-        printf("Not enough arguments\n");
-        return 0;
-    }
-
-    
-
-    int width, height;        //<- width and height of input_img, gives pixel dimensions
-    int channels;             //<- number of channels for input_img (3:rgb or 4:rgba)
-    unsigned char *input_img;      //<- input image loaded, uses rgb values for pixels (0-255)
+    // INITAILZE VARIABLES  
+    // Input Image
+    int width, height;         //<- width and height of input_img, gives pixel dimensions
+    int channels;              //<- number of channels for input_img (3:rgb or 4:rgba)
+    unsigned char *input_img;  //<- input image loaded, uses rgb values for pixels (0-255)
+    char *filename = NULL;     //<- Holder of input file name (default: NULL)
 
     // Output Image 
-    int out_width, out_height; //<- output version of width, height   
+    int out_width = 30;        //<- user provided output width for image (default: 15)
+    int out_height = 30;       //<- user provided output height for image (default: 15)  
+    char *out_name;            //<- output image file name 
+    char *spout_name;          //<- superpixel output image file namee
+    char *input_basename;       //<- base of inputimage name used to create output image names
+
     //Palette
-    int K_colors;          //<- number of colors we aim to use in the pallette
- 
-    char *filename = argv[1];
-    out_width = atoi(argv[2]);
-    out_height = atoi(argv[3]);
-    K_colors = atoi(argv[4]);
-
-    // SET SOME VARIABLES 
+    int K_colors = 8;          //<- number of colors we aim to use in the pallette (default: 8)
     
-    // //(TODO: Dynamic through cmdline)
-    // out_width = 64; out_height = 64;
-    // K_colors = 16;
+    //Timing variables
+    double startAllTime, endAllTime; 
+    double startIterateTime, endIterateTime; 
 
+
+    // PARSE + CHECK USER INPUT
+    int opt; 
+    while ((opt = getopt(argc, argv, "f:x:y:k:")) != -1){
+        switch (opt) {
+        case 'f':
+            filename = optarg;
+            break;
+        case 'x':
+            out_width = atoi(optarg);
+            break;
+        case 'y':
+            out_height = atoi(optarg);
+            break;
+        case 'k':
+            K_colors = atoi(optarg);
+            break;
+    
+        case '?':
+        default:
+            usage(argv[0]);
+            return 1;
+            break;
+        }
+    }
+
+    if (filename == NULL) {
+        printf("ERROR: No input image was given\n");
+        usage(argv[0]);
+        return -1;
+    }
+
+  
+    #ifdef TIMING
+    startAllTime = CycleTimer::currentSeconds();
+    #endif
+    
     //*** ******************* ***//
     //*** PROCESS INPUT IMAGE ***//
     //*** ******************* ***//
+
 
     // Load input image (always 3 channels)
     input_img = wrp_stbi_load(filename, &width, &height, &channels, 3);
@@ -120,115 +161,54 @@ int main(int argc, char** argv) {
     //*** CORE ALGORITHM LOOP ***//
     //*** ******************* ***//
 
-    double startTime = CycleTimer::currentSeconds();
+    #ifdef TIMING
+    startIterateTime = CycleTimer::currentSeconds();
+    #endif
 
     pixImage.iterate();
 
+    #ifdef TIMING
+    endIterateTime = CycleTimer::currentSeconds();
+    #endif
 
-    double endTime = CycleTimer::currentSeconds();
-    double overallDuration = endTime - startTime;
-
-    printf("Overall: %.3f ms\n", 1000.f * overallDuration);
-
-    char *out_name;
-    char *spout_name;
-    char *input_basename = strtok(filename, ".");
-    asprintf(&out_name, "%s_%dx%d_%d.png", input_basename, out_width, out_height, K_colors);
-    asprintf(&spout_name, "%s_%dx%d_%d_sp.png", input_basename, out_width, out_height, K_colors);
-
+    
     //*** ******************** ***//
     //*** PROCESS OUTPUT IMAGE ***//
     //*** ******************** ***//
-    // Passed in the correct number of channels, in this case the number desired
+
+    // Create output image names
+    input_basename = strtok(filename, ".");
+    asprintf(&out_name, "%s_%dx%d_%d.png", input_basename, out_width, out_height, K_colors);
+    asprintf(&spout_name, "%s_%dx%d_%d_sp.png", input_basename, out_width, out_height, K_colors);
+
+    // Create the output image files in current directory
     stbi_write_png(out_name, pixImage.out_width, pixImage.out_height, channels, pixImage.output_img, pixImage.out_width * channels);
     stbi_write_png(spout_name, pixImage.in_width, pixImage.in_height, channels, pixImage.spoutput_img, pixImage.in_width * channels);
     
+    
+    #ifdef TIMING
+    endAllTime = CycleTimer::currentSeconds();
+    #endif
+
     //*** ********** ***//
     //*** FREE STUFF ***//
     //*** ********** ***//
 
     stbi_image_free(input_img);
-
     pixImage.freeAll();
-}
 
+    //*** ************* ***//
+    //*** PRINT RESULTS ***//
+    //*** ************* ***//
 
-
-
-//****************************************************************//
-//**************** DEBUG HELPER FUNCTION STUFF *******************//
-//****************************************************************//
-
-/**
- * @brief Check how in range a float is to consider it "equal"
- * 
- * @param p1 first float value
- * @param p2 second pixel value
- * @return int 
- */
-int in_range(unsigned char* p1, unsigned char* p2){
-    float value = ( ((float)*p1) - ((float) *p2));
+    #ifdef TIMING
     
-    // The range we will consider it to be "equal"
-    if (abs(value) > 2){
-        return 1;
-    }
-    return 0;
-}
+    // Print Iterate time
+    printf("Overall: %.3f s\n", 1000.f * (endAllTime - startAllTime));
 
+    // Print Iterate time
+    printf("\t- Iterate: %.3f ms\n", 1000.f * (endIterateTime - startIterateTime));
 
-/**
- * @brief find what pixels are different between two images
- * 
- * @param image_1_name file name of first image
- * @param image_2_name file name of second image
- * @param print_content state whether or not we want to print differnt pixels
- */
-int image_diff(char const *image_1_name, char const *image_2_name, int print_content){
-    printf("DEBUG: Running image_diff\n");
-    // Initilize variables
-    int widthg, heightg, channelsg;
-    int widthb, heightb, channelsb;
-
-    // Get content of first image
-    unsigned char *img_g = stbi_load(image_1_name, &widthg, &heightg, &channelsg, 0);
-    if(img_g == NULL) {
-        printf("Error in loading the image\n");
-        exit(1);
-    }
-    printf("Loaded image G with a width of %dpx, a height of %dpx and %d channels\n", widthg, heightg, channelsg);
+    #endif
     
-    //Get content of second image
-    unsigned char *img_b = stbi_load(image_2_name, &widthb, &heightb, &channelsb, 0);
-    if(img_b == NULL) {
-        printf("Error in loading the image\n");
-        exit(1);
-    }
-    printf("Loaded image B with a width of %dpx, a height of %dpx and %d channels\n", widthb, heightb, channelsb);
-    
-    size_t img_sizeg = widthg * heightg * channelsg;
-    size_t img_sizeb = widthb * heightb * channelsb;
-
-    // Loop through pixels to make them grey scale
-    int pix = 0;
-    int count =0;
-    for(unsigned char *pg = img_g, *pb = img_b;  
-        pg != img_g + img_sizeg; 
-        pg += channelsg, pb += channelsb){
-
-        if ( in_range(pg, pb) || in_range(pg+1, pb+1) || in_range(pg+2, pb+2) ) {
-            if (print_content){
-                printf("At %d: pg = (%d,%d,%d) pb = (%d,%d,%d) dif: (%d,%d,%d) \n", 
-                        pix, 
-                        *pg, *(pg+1), *(pg+2), 
-                        *pb, *(pb+1), *(pb+2),
-                        *pg - *pb, *(pg+1) - *(pb+1), *(pg+2) - *(pb+2));
-            }
-            count++;
-        }
-        pix++;
-    }
-    printf("Count: %d\n",count);
-    printf("DEBUG: DONE image_diff\n");
-    return 0;
 }

@@ -11,11 +11,12 @@
  * 
  */
 
-
+// Constants to regulate what we print
 //#define DEBUG     // misc. debug statements
-//#define RUN_DEBUG // debug statements that check running progress
+#define RUN_DEBUG // debug statements that check running progress
 
 // Import util libraries
+#include "util/CycleTimer.h"
 #include "util/colorConv.h"
 #include "util/superPixel.h"
 #include "pixImage.h"
