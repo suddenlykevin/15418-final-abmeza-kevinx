@@ -47,6 +47,11 @@ typedef struct {
 } PalettePair;
 
 class PixImage{
+  private:
+    // Timing variables for our reference
+    double startAllTime, endAllTime;
+    double startInitializeTime, endInitializeTime;
+
   public:
     // Input Image Content 
     int in_width, in_height;  //<- width and height of input_img, gives pixel dimensions
@@ -84,18 +89,17 @@ class PixImage{
     /**
      * @brief Construct a new Pix Image object
      * 
-     * @param input_image 
-     * @param in_w 
-     * @param in_h 
-     * @param out_w 
-     * @param out_h 
-     * @param K 
+     * @param input_image name of input image being used
+     * @param in_w        width of input image
+     * @param in_h        height of input image
+     * @param out_w       desiered width of output image
+     * @param out_h       desired height of output image
+     * @param K           number of colors desired for output image
      */
     PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, int out_h, int K);
 
     /**
-     * @brief Initilize function called in the initailze step
-     * 
+     * @brief Initializes all values, run in initialize step
      */
     void initialize();
 
@@ -115,10 +119,10 @@ class PixImage{
     void getAveragedPalette(LabColor *avg_palette);
 
     /**
-     * @brief 
-     * 
+     * @brief Runs the entire algorithm that initializes variables and
+     *        pixelates a given input image
      */
-    void iterate();
+    void runPixelate();
 
     void getMajorAxis(int palette_index, float *value, LabColor *vector);
 
@@ -127,8 +131,7 @@ class PixImage{
     void condensePalette();
 
     /**
-     * @brief 
-     * 
+     * @brief Frees everything that has been alocated after running runPixelate 
      */
     void freeAll();
 

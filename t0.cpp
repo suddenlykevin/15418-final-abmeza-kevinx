@@ -15,8 +15,6 @@
  * 
  */
 
-#define TIMING // Calculate and print timing information
-
 #include "pixImage.h"
 
 // Import stb_image libraries
@@ -97,10 +95,7 @@ int main(int argc, char** argv) {
 
     //Palette
     int K_colors = 8;          //<- number of colors we aim to use in the pallette (default: 8)
-    
-    //Timing variables
-    double startAllTime, endAllTime; 
-    double startIterateTime, endIterateTime; 
+     
 
 
     // PARSE + CHECK USER INPUT
@@ -133,11 +128,6 @@ int main(int argc, char** argv) {
         usage(argv[0]);
         return -1;
     }
-
-  
-    #ifdef TIMING
-    startAllTime = CycleTimer::currentSeconds();
-    #endif
     
     //*** ******************* ***//
     //*** PROCESS INPUT IMAGE ***//
@@ -152,26 +142,12 @@ int main(int argc, char** argv) {
     PixImage pixImage(input_img, width, height, out_width, out_height, K_colors);
 
 
-    //*** ******************** ***//
-    //*** (4.1) INITIALIZATION ***//
-    //*** ******************** ***//
-    pixImage.initialize();
-
-    //*** ******************* ***//
-    //*** CORE ALGORITHM LOOP ***//
-    //*** ******************* ***//
-
-    #ifdef TIMING
-    startIterateTime = CycleTimer::currentSeconds();
-    #endif
-
-    pixImage.iterate();
-
-    #ifdef TIMING
-    endIterateTime = CycleTimer::currentSeconds();
-    #endif
-
+    //*** ********************** ***//
+    //*** CREATE PIXELATED IMAGE ***//
+    //*** ********************** ***//
     
+    pixImage.runPixelate();
+
     //*** ******************** ***//
     //*** PROCESS OUTPUT IMAGE ***//
     //*** ******************** ***//
@@ -185,10 +161,6 @@ int main(int argc, char** argv) {
     stbi_write_png(out_name, pixImage.out_width, pixImage.out_height, channels, pixImage.output_img, pixImage.out_width * channels);
     stbi_write_png(spout_name, pixImage.in_width, pixImage.in_height, channels, pixImage.spoutput_img, pixImage.in_width * channels);
     
-    
-    #ifdef TIMING
-    endAllTime = CycleTimer::currentSeconds();
-    #endif
 
     //*** ********** ***//
     //*** FREE STUFF ***//
@@ -196,19 +168,5 @@ int main(int argc, char** argv) {
 
     stbi_image_free(input_img);
     pixImage.freeAll();
-
-    //*** ************* ***//
-    //*** PRINT RESULTS ***//
-    //*** ************* ***//
-
-    #ifdef TIMING
-    
-    // Print Iterate time
-    printf("Overall: %.3f s\n", 1000.f * (endAllTime - startAllTime));
-
-    // Print Iterate time
-    printf("\t- Iterate: %.3f ms\n", 1000.f * (endIterateTime - startIterateTime));
-
-    #endif
     
 }

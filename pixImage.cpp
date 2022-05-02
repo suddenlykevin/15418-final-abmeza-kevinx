@@ -14,6 +14,8 @@
 // Constants to regulate what we print
 //#define DEBUG     // misc. debug statements
 #define RUN_DEBUG // debug statements that check running progress
+#define TIMING // Calculate and print timing information
+
 
 // Import util libraries
 #include "util/CycleTimer.h"
@@ -168,6 +170,12 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
     N_pix = out_width * out_height;
 
     palette_complete = false;
+    
+    #ifdef TIMING
+        //Timing variables
+        startAllTime=0.f;
+        endAllTime=0.f; 
+    #endif
 }
 
 
@@ -456,8 +464,28 @@ void PixImage :: initialize(){
     T = sqrt(2*variance) * kT0SafetyFactor;
 }
 
-void PixImage :: iterate(){
+void PixImage :: runPixelate(){
     
+    #ifdef TIMING
+    startAllTime = CycleTimer::currentSeconds();
+    #endif
+
+    //*** ******************** ***//
+    //*** (4.1) INITIALIZATION ***//
+    //*** ******************** ***//
+    #ifdef TIMING
+    startInitializeTime = CycleTimer::currentSeconds();
+    #endif
+    
+    initialize();
+    
+    #ifdef TIMING
+    endInitializeTime = CycleTimer::currentSeconds();
+    #endif
+    //*** ******************* ***//
+    //*** CORE ALGORITHM LOOP ***//
+    //*** ******************* ***//
+
     // Size of super pixel on input image
     float S = sqrt(((float) (M_pix))/((float) (N_pix)));
     float *distance = (float *)wrp_calloc(M_pix, sizeof(float));
@@ -474,10 +502,6 @@ void PixImage :: iterate(){
 
         //*** ************************ ***//
         //*** (4.2) REFINE SUPERPIXELS ***//
-        //*** ************************ ***//
-
-        //*** ************************ ***//
-        //*** (4.2.1) ASSOCIATE SUPERPIXELS ***//
         //*** ************************ ***//
 
         ///*** Update boundaries of pixels assosiated with super pixels ***///
@@ -530,10 +554,12 @@ void PixImage :: iterate(){
                 }
             }
         }
-        #ifdef RUN_DEBUG
+        #ifdef RUN_DEBUG 
         printf("udpate means...");
         #endif
+        
         updateSuperPixelMeans();
+
         #ifdef RUN_DEBUG
         printf("DONE\n");
         #endif
@@ -541,6 +567,7 @@ void PixImage :: iterate(){
         #ifdef RUN_DEBUG
         printf("smooth...");
         #endif
+
         // smooth positions
         for (int j = 0; j < out_height; j++) {
             for (int i = 0; i < out_width; i++) {                
@@ -843,6 +870,22 @@ void PixImage :: iterate(){
     }
 
     free(distance);
+
+    #ifdef TIMING
+    endAllTime = CycleTimer::currentSeconds();
+    #endif
+
+
+    #ifdef TIMING
+    //*** ******************** ***//
+    //*** PRINT TIMING RESULTS ***//
+    //*** ******************** ***//
+    // Print Total Time to run algorithm (not include get image file and create image file)
+    printf("Overall: %.3f s\n", 1000.f * (endAllTime - startAllTime));
+    
+    printf("\t- Initialize: %.3f s\n", 1000.f * (endInitializeTime - startInitializeTime));
+    #endif
+
 }
 
 void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector) {
