@@ -12,6 +12,9 @@
  */
 
 
+//#define DEBUG     // misc. debug statements
+//#define RUN_DEBUG // debug statements that check running progress
+
 // Import util libraries
 #include "util/colorConv.h"
 #include "util/superPixel.h"
@@ -185,10 +188,10 @@ void PixImage :: initSuperPixels(){
             FloatVec pos =  (FloatVec) {x,y};
             // Set value
             superPixel_pos[out_width * j + i] = pos;
-            
-            // ********** DEBUG ********** //
+
+#ifdef DEBUG
             //printf("superpixel %d: (%f, %f)\n", out_width * j + i, x, y);
-            // ********** DEBUG ********** //
+#endif
         }
     }
 
@@ -202,9 +205,9 @@ void PixImage :: initSuperPixels(){
             // Set Value
             region_map[in_width * j + i] = out_width * y + x;
 
-            // ********** DEBUG ********** //
+#ifdef DEBUG
             //printf("Pixel %d: (%d)\n", in_width * j + i, out_width * y + x);
-            // ********** DEBUG ********** //
+#endif
         }
     }
 }
@@ -337,10 +340,17 @@ void PixImage :: condensePalette() {
     float new_prob_c[K_colors * 2];
     float new_prob_c_if_sp[K_colors * 2 * N_pix];
     int new_palette_assign[N_pix];
-    printf("averaging... %d\n", palette_size);
+    
+    #ifdef RUN_DEBUG
+    printf("averaging... %d ", palette_size);
+    #endif
+
     getAveragedPalette(average_palette);
 
-    printf("averaged...\n");
+    #ifdef RUN_DEBUG
+    printf("averaged... ");
+    #endif
+
     // for each pair, condense to average
     for(int j = 0; j < palette_size >> 1; ++j) {
         int index_a = palette_pairs[j].a;
@@ -368,6 +378,11 @@ void PixImage :: condensePalette() {
 
     palette_size = K_colors;
     palette_complete = true;
+
+    
+    #ifdef RUN_DEBUG
+    printf("DONE \n");
+    #endif
 }
 
 void PixImage :: initialize(){
@@ -413,7 +428,9 @@ void PixImage :: initialize(){
     color_sum.a = color_sum.a * prob_sp;
     color_sum.b = color_sum.b * prob_sp;
 
+    #ifdef DEBUG
     printf("color_init: (%f, %f, %f)\n", color_sum.L, color_sum.a, color_sum.b);
+    #endif
 
     // Store color and update prob to any
     pushPaletteColor(color_sum, 0.5f);
@@ -449,7 +466,10 @@ void PixImage :: iterate(){
 
     // update superpixel segments
     while (!converged && iter < maxIter) {
+        
+        #ifdef RUN_DEBUG
         printf("iter %d, %f\n", iter, T);
+        #endif
 
         //*** ************************ ***//
         //*** (4.2) REFINE SUPERPIXELS ***//
@@ -460,11 +480,19 @@ void PixImage :: iterate(){
         //*** ************************ ***//
 
         ///*** Update boundaries of pixels assosiated with super pixels ***///
-        printf("average...\n");
+        
+        #ifdef RUN_DEBUG
+        printf("average...");
+        #endif
         LabColor average_palette[K_colors*2];
         getAveragedPalette(average_palette);
+        #ifdef RUN_DEBUG
+        printf("DONE\n");
+        #endif'
 
+        #ifdef RUN_DEBUG
         printf("associate...\n");
+        #endif
         for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
         for (int j = 0; j < out_height; ++j) {
             for (int i = 0; i < out_width; ++i) {
@@ -501,11 +529,17 @@ void PixImage :: iterate(){
                 }
             }
         }
-
-        printf("update means...\n");
+        #ifdef RUN_DEBUG
+        printf("udpate means...");
+        #endif
         updateSuperPixelMeans();
+        #ifdef RUN_DEBUG
+        printf("DONE\n");
+        #endif
 
-        printf("smooth...\n");
+        #ifdef RUN_DEBUG
+        printf("smooth...");
+        #endif
         // smooth positions
         for (int j = 0; j < out_height; j++) {
             for (int i = 0; i < out_width; i++) {                
@@ -595,14 +629,18 @@ void PixImage :: iterate(){
             }
         }
 
+        #ifdef RUN_DEBUG
+        printf("DONE\n");
+        #endif
         //update the SP mean colors with the smoothed values
         memcpy(sp_mean_lab, buf_lab, N_pix * sizeof(LabColor));
         
         //*** ************************************** ***//
         //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
         //*** ************************************** ***//
-
-        printf("associate...\n");
+        #ifdef RUN_DEBUG
+        printf("associate...");
+        #endif
         float new_prob_c[palette_size];
         memset(new_prob_c, 0, palette_size*sizeof(float));
         memset(prob_c_if_sp, 0, K_colors * 2 * N_pix *sizeof(float));
@@ -649,14 +687,18 @@ void PixImage :: iterate(){
             }
         }
 
+        #ifdef RUN_DEBUG
+        printf("DONE\n");
+        #endif
         // update color probabilities
         memcpy(prob_c, new_prob_c, palette_size*sizeof(float));
         
         // //*** ******************** ***//
         // //*** (4.3) REFINE PALETTE ***//
         // //*** ******************** ***//
-
-        printf("refine...\n");
+        #ifdef RUN_DEBUG
+        printf("refine...");
+        #endif
         float palette_error = 0.f;
         //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
         for (int c = 0; c< palette_size; c++){
@@ -680,12 +722,18 @@ void PixImage :: iterate(){
                 palette_error += sqrt(pow(last.L-curr.L, 2.0f) + pow(last.a-curr.a, 2.0f) + pow(last.b-curr.b, 2.0f));
             }
         }
+        #ifdef RUN_DEBUG
+        printf("DONE\n");
+        #endif
 
         //*** ******************** ***//
         //*** (4.3) EXPAND PALETTE ***//
         //*** ******************** ***//
         
-        printf("expand...\n");
+        #ifdef RUN_DEBUG
+        printf("expand... ");
+        #endif
+
         if (palette_error < kPaletteErrorTolerance) {
             // check for convergence, lower temperature
             if (T <= kTF) {
@@ -699,7 +747,10 @@ void PixImage :: iterate(){
                 int splits[K_colors];
                 int curr = 0;
                 for (int i = 0; i < palette_size >> 1; i++) {
+                    #ifdef DEBUG
                     // printf("(%d, %d)\n", palette_pairs[i].a, palette_pairs[i].b);
+                    #endif
+
                     LabColor color_a = palette_lab[palette_pairs[i].a];
                     LabColor color_b = palette_lab[palette_pairs[i].b];
 
@@ -726,15 +777,19 @@ void PixImage :: iterate(){
 
                 // should sort splits by distance here.
                 if (curr > 0) {
-                    printf("expanding... %d, %d\n", palette_size, curr);
+                    #ifdef RUN_DEBUG
+                    printf("expanding... %d, %d", palette_size, curr);
+                    #endif
                 }
 
                 for (int i = 0; i < curr; i++) {
                     splitColor(splits[i]);
 
                     // if full, seal palette
-                    if (palette_size >= 2 * K_colors) {
-                        printf("COMPLETE\n");
+                    if (palette_size >= 2 * K_colors) {            
+                        #ifdef RUNF_DEBUG
+                        printf("COMPLETE\n");                        
+                        #endif
                         condensePalette();
                         break;
                     }
@@ -793,7 +848,9 @@ void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector)
     float covariance[9];
     memset(covariance, 0, 9*sizeof(float));
     float sum = 0;
-    // printf("fsds %d, %f, %f\n", palette_index, prob_sp, prob_c[palette_index]);
+    #ifdef DEBUG
+    //printf("fsds %d, %f, %f\n", palette_index, prob_sp, prob_c[palette_index]);
+    #endif
 
     // compute covariance matrix
     for (int j = 0; j < out_height; j++) {

@@ -26,6 +26,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image/stb_image_write.h"
 
+#include "util/CycleTimer.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -119,7 +120,15 @@ int main(int argc, char** argv) {
     //*** CORE ALGORITHM LOOP ***//
     //*** ******************* ***//
 
+    double startTime = CycleTimer::currentSeconds();
+
     pixImage.iterate();
+
+
+    double endTime = CycleTimer::currentSeconds();
+    double overallDuration = endTime - startTime;
+
+    printf("Overall: %.3f ms\n", 1000.f * overallDuration);
 
     char *out_name;
     char *spout_name;

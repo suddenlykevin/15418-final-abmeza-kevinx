@@ -3,7 +3,7 @@ APP_NAME=t0
 CXX=g++
 CXXFLAGS= -Wall -pedantic -lm
 
-SRC =  t0.cpp pixImage.cpp util/colorConv.cpp util/superPixel.cpp
+SRC =  t0.cpp pixImage.cpp util/colorConv.cpp util/superPixel.cpp util/CycleTimer.h
 
 # Compilation Commands
 $(APP_NAME): $(SRC)

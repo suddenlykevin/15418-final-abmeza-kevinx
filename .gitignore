@@ -1,0 +1,6 @@
+# Used to ignore files we do not need anymore
+
+
+# Image files
+*.png
+*.jpeg
