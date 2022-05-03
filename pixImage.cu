@@ -80,6 +80,211 @@ __constant__ GlobalConstants cuGlobalConsts;
 //*******************  KERNAL FUNCTIONS ******************//
 //********************************************************//
 
+/**
+ * @brief kernal that runs initSuperPixels on Device
+ */
+__global__ void kernelCreateInputLAB() {
+
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    //TODO: RUN ON ONE KERNAL FOR NOW
+    if (index == 0){
+    
+    // *** TODO TRANSFER OVER CONSTANTS ***//
+    int M_pix = cuGlobalConsts.M_pix;
+    unsigned char *input_img = cuGlobalConsts.input_img;
+    LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
+
+
+    unsigned char *p; 
+    LabColor *pl;
+    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*3); p += 3, pl ++) 
+        rgb2lab(*p, *(p+1), *(p+2), &(pl->L), &(pl->a), &(pl->b));
+
+    
+    }
+}
+
+/**
+ * @brief kernal that runs initSuperPixels on Device
+ */
+__global__ void kernelInitSuperPixels() {
+
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    //TODO: RUN ON ONE KERNAL FOR NOW
+    if (index == 0){
+    
+    // *** TODO TRANSFER OVER CONSTANTS ***//
+    int in_width = cuGlobalConsts.in_width;
+    int in_height = cuGlobalConsts.in_height;
+    int out_width = cuGlobalConsts.out_width;
+    int out_height = cuGlobalConsts.out_height;
+    FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
+    FloatVec *region_map = cuGlobalConsts.region_map;
+
+
+    // Get change in length of values
+    float dx = (float) in_width/(float) out_width;
+    float dy = (float) in_height/(float) out_height;
+
+    // initialize superpixel positions (centers)
+    for (int j = 0; j < out_height; ++j) {
+        for (int i = 0; i < out_width; ++i) {
+
+            // Calculate midpoint value
+            float x = ((float) i + 0.5f) * dx;
+            float y = ((float) j + 0.5f) * dy;
+            FloatVec pos =  (FloatVec) {x,y};
+            // Set value
+            superPixel_pos[out_width * j + i] = pos;
+
+
+        }
+    }
+
+    // Initial assignment of pixels to a specific superpxel  
+    for (int j = 0; j < in_height; ++j) {
+        for (int i = 0; i < in_width; ++i) {
+            // Calculate which superpixel to set
+            int x = (int) ((float) i / dx);
+            int y = (int) ((float) j / dy);
+
+            // Set Value
+            region_map[in_width * j + i] = out_width * y + x;
+
+
+        }
+    }
+
+    }
+}
+/**
+ * @brief kernal that runs updateSuperPixelMeans on Device
+ */
+__global__ void kernelUpdateSuperPixelMeans() {
+    
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    //TODO: RUN ON ONE KERNAL FOR NOW
+    if (index == 0){
+    
+    // *** TODO TRANSFER OVER CONSTANTS ***//
+    int N_pix = cuGlobalConsts.N_pix;
+    int in_width = cuGlobalConsts.in_width;
+    int in_height = cuGlobalConsts.in_height;
+    int out_width = cuGlobalConsts.out_width;
+    int out_height = cuGlobalConsts.out_height;
+
+    int *region_map = cuGlobalConsts.region_map;
+    LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
+    FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
+
+
+    FloatVec sp_sums[N_pix];
+    memset(sp_sums, 0, N_pix*sizeof(FloatVec));
+    LabColor color_sums[N_pix];
+    memset(color_sums, 0, N_pix*sizeof(LabColor));
+    int sp_count[N_pix];
+    memset(sp_count, 0, N_pix*sizeof(int));
+    // Find the mean colors (from input image) for each superpixel
+    for (int j = 0; j < in_height; j++) {
+        for (int i = 0; i < in_width; i++) {
+            int idx = j*in_width + i;
+            int spidx = region_map[idx];
+            sp_count[spidx] ++;
+            sp_sums[spidx].x += i;
+            sp_sums[spidx].y += j;
+
+            color_sums[spidx].L += input_img_lab[idx].L;
+            color_sums[spidx].a += input_img_lab[idx].a;
+            color_sums[spidx].b += input_img_lab[idx].b;
+        }
+    }
+    
+    // Repostion superpixels and update the output color pallete
+    for (int j = 0; j < out_height; j++) {
+        for (int i = 0; i < out_width; i++) {
+            // Index of superpixel
+            int spidx = j*out_width + i;
+
+            // Calculate new position for super pixel
+            float x = sp_sums[spidx].x / sp_count[spidx];
+            float y = sp_sums[spidx].y / sp_count[spidx];
+            FloatVec newpos = {x, y};
+            superPixel_pos[spidx] = newpos;
+
+            // Set output_img_lab to new mean value
+            sp_mean_lab[spidx].L = color_sums[spidx].L/sp_count[spidx];
+            sp_mean_lab[spidx].a = color_sums[spidx].a/sp_count[spidx];
+            sp_mean_lab[spidx].b = color_sums[spidx].b/sp_count[spidx];
+        }
+    }
+
+    }
+}
+
+/**
+ * @brief kernal that runs initializes palette values on Device
+ */
+__global__ void kernelInitPaletteValues() {
+    
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    //TODO: RUN ON ONE KERNAL FOR NOW
+    if (index == 0){
+    
+
+    // *** TODO TRANSFER OVER CONSTANTS ***//
+    int N_pix = cuGlobalConsts.N_pix;
+
+    float *T = cuGlobalConsts.T;
+    LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
+    float *prob_c_if_sp = cuGlobalConsts.prob_c_if_sp;
+
+
+    // Find mean of all M_pix color inputs
+    LabColor color_sum = {0.f, 0.f, 0.f};
+
+    //add all colors
+    for (int p = 0; p < N_pix; p++) {
+        color_sum.L += sp_mean_lab[p].L;
+        color_sum.a += sp_mean_lab[p].a;
+        color_sum.b += sp_mean_lab[p].b;
+    }
+    // divide all by M_pix
+    color_sum.L = color_sum.L * prob_sp;
+    color_sum.a = color_sum.a * prob_sp;
+    color_sum.b = color_sum.b * prob_sp;
+
+    #ifdef DEBUG
+    printf("color_init: (%f, %f, %f)\n", color_sum.L, color_sum.a, color_sum.b);
+    #endif
+
+    // Store color and update prob to any
+    pushPaletteColor(color_sum, 0.5f);
+    for (int idx = 0; idx < N_pix; idx ++) {
+        prob_c_if_sp[idx] = 0.5f;
+    }
+    LabColor majorAxis;
+    float variance;
+    getMajorAxis(0, &variance, &majorAxis);
+    
+    color_sum.L += majorAxis.L * kSubclusterPertubation;
+    color_sum.a += majorAxis.a * kSubclusterPertubation;
+    color_sum.b += majorAxis.b * kSubclusterPertubation;
+
+    pushPaletteColor(color_sum, 0.5f);
+    for (int idx = 0; idx < N_pix; idx ++) {
+        prob_c_if_sp[N_pix + idx] = 0.5f;
+    }
+
+    pushPalettePair(0, 1);
+
+    *T = sqrt(2*variance) * kT0SafetyFactor;
+
+    }
+}
 
 //********************************************************//
 //*******************  PIXEL FUNCTIONS  ******************//
@@ -161,84 +366,26 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
  * @brief Initializes the superPixel_pos array and the region_map array
  */
 void PixImage :: initSuperPixels(){
-    // Get change in length of values
-    float dx = (float) in_width/(float) out_width;
-    float dy = (float) in_height/(float) out_height;
+    
+    // Intialize size of kernal
+    dim3 blockDim(in_width, in_height, 1);
+    dim3 gridDim(1,1);
 
-    // initialize superpixel positions (centers)
-    for (int j = 0; j < out_height; ++j) {
-        for (int i = 0; i < out_width; ++i) {
 
-            // Calculate midpoint value
-            float x = ((float) i + 0.5f) * dx;
-            float y = ((float) j + 0.5f) * dy;
-            FloatVec pos =  (FloatVec) {x,y};
-            // Set value
-            superPixel_pos[out_width * j + i] = pos;
+    kernelInitSuperPixels<<<gridDim, blockDim>>>();
+    cudaDeviceSynchronize();
 
-#ifdef DEBUG
-            //printf("superpixel %d: (%f, %f)\n", out_width * j + i, x, y);
-#endif
-        }
-    }
-
-    // Initial assignment of pixels to a specific superpxel  
-    for (int j = 0; j < in_height; ++j) {
-        for (int i = 0; i < in_width; ++i) {
-            // Calculate which superpixel to set
-            int x = (int) ((float) i / dx);
-            int y = (int) ((float) j / dy);
-
-            // Set Value
-            region_map[in_width * j + i] = out_width * y + x;
-
-#ifdef DEBUG
-            //printf("Pixel %d: (%d)\n", in_width * j + i, out_width * y + x);
-#endif
-        }
-    }
 }
 
 void PixImage :: updateSuperPixelMeans(){
-    FloatVec sp_sums[N_pix];
-    memset(sp_sums, 0, N_pix*sizeof(FloatVec));
-    LabColor color_sums[N_pix];
-    memset(color_sums, 0, N_pix*sizeof(LabColor));
-    int sp_count[N_pix];
-    memset(sp_count, 0, N_pix*sizeof(int));
-    // Find the mean colors (from input image) for each superpixel
-    for (int j = 0; j < in_height; j++) {
-        for (int i = 0; i < in_width; i++) {
-            int idx = j*in_width + i;
-            int spidx = region_map[idx];
-            sp_count[spidx] ++;
-            sp_sums[spidx].x += i;
-            sp_sums[spidx].y += j;
-
-            color_sums[spidx].L += input_img_lab[idx].L;
-            color_sums[spidx].a += input_img_lab[idx].a;
-            color_sums[spidx].b += input_img_lab[idx].b;
-        }
-    }
     
-    // Repostion superpixels and update the output color pallete
-    for (int j = 0; j < out_height; j++) {
-        for (int i = 0; i < out_width; i++) {
-            // Index of superpixel
-            int spidx = j*out_width + i;
+    // Intialize size of kernal
+    dim3 blockDim(in_height,in_width, 1);
+    dim3 gridDim(1,1);
 
-            // Calculate new position for super pixel
-            float x = sp_sums[spidx].x / sp_count[spidx];
-            float y = sp_sums[spidx].y / sp_count[spidx];
-            FloatVec newpos = {x, y};
-            superPixel_pos[spidx] = newpos;
 
-            // Set output_img_lab to new mean value
-            sp_mean_lab[spidx].L = color_sums[spidx].L/sp_count[spidx];
-            sp_mean_lab[spidx].a = color_sums[spidx].a/sp_count[spidx];
-            sp_mean_lab[spidx].b = color_sums[spidx].b/sp_count[spidx];
-        }
-    }
+    kernelUpdateSuperPixelMeans<<<gridDim, blockDim>>>();
+    cudaDeviceSynchronize();
 }
 
 void PixImage :: pushPaletteColor(LabColor color, float prob) {
@@ -444,7 +591,7 @@ void PixImage :: initVariables(){
     params.out_width = out_width;
     params.out_height = out_height;
     params.N_pix = N_pix;
-    
+
     params.K_colors = K_colors;
     params.palette_size = palette_size;
 
@@ -479,54 +626,24 @@ void PixImage :: initialize(){
     initVariables();
 
     ///*** Create input_img_lab version ***///
-    unsigned char *p; LabColor *pl;
-    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*3); p += 3, pl ++) 
-        rgb2lab(*p, *(p+1), *(p+2), &(pl->L), &(pl->a), &(pl->b));
+    dim3 blockDim(1, 1, 1);
+    dim3 gridDim(1,1);
+
+    kernelCreateInputLAB<<<gridDim, blockDim>>>();
+    cudaDeviceSynchronize();
 
     ///*** Initialize Superpixel Values ***///
     initSuperPixels();
     updateSuperPixelMeans();
 
+
     ///*** Initialize Palette Values ***///
-    // Find mean of all M_pix color inputs
-    LabColor color_sum = {0.f, 0.f, 0.f};
+    dim3 blockDim(in_width, in_height, 1);
+    dim3 gridDim(1,1);
 
-    //add all colors
-    for (int p = 0; p < N_pix; p++) {
-        color_sum.L += sp_mean_lab[p].L;
-        color_sum.a += sp_mean_lab[p].a;
-        color_sum.b += sp_mean_lab[p].b;
-    }
-    // divide all by M_pix
-    color_sum.L = color_sum.L * prob_sp;
-    color_sum.a = color_sum.a * prob_sp;
-    color_sum.b = color_sum.b * prob_sp;
+    kernelInitPaletteValues<<<gridDim, blockDim>>>();
+    cudaDeviceSynchronize();
 
-    #ifdef DEBUG
-    printf("color_init: (%f, %f, %f)\n", color_sum.L, color_sum.a, color_sum.b);
-    #endif
-
-    // Store color and update prob to any
-    pushPaletteColor(color_sum, 0.5f);
-    for (int idx = 0; idx < N_pix; idx ++) {
-        prob_c_if_sp[idx] = 0.5f;
-    }
-    LabColor majorAxis;
-    float variance;
-    getMajorAxis(0, &variance, &majorAxis);
-    
-    color_sum.L += majorAxis.L * kSubclusterPertubation;
-    color_sum.a += majorAxis.a * kSubclusterPertubation;
-    color_sum.b += majorAxis.b * kSubclusterPertubation;
-
-    pushPaletteColor(color_sum, 0.5f);
-    for (int idx = 0; idx < N_pix; idx ++) {
-        prob_c_if_sp[N_pix + idx] = 0.5f;
-    }
-
-    pushPalettePair(0, 1);
-
-    T = sqrt(2*variance) * kT0SafetyFactor;
 }
 
 void PixImage :: runPixelate(){
