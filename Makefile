@@ -2,7 +2,7 @@ EXECUTABLE := t0
 LDFLAGS=-L/usr/local/depot/cuda-10.2/lib64/ -lcudart
 CU_FILES   := pixImage.cu
 CU_DEPS    :=
-CC_FILES   := t0.cpp colorConv.cpp 
+CC_FILES   := t0.cpp helper.cpp 
 LOGS	   := logs
 
 all: $(EXECUTABLE)
@@ -26,7 +26,7 @@ LDFRAMEWORKS := $(addprefix -framework , $(FRAMEWORKS))
 
 NVCC=nvcc
 
-OBJS=$(OBJDIR)/t0.o $(OBJDIR)/colorConv.o $(OBJDIR)/pixImage.o 
+OBJS=$(OBJDIR)/t0.o $(OBJDIR)/helper.o $(OBJDIR)/pixImage.o 
 
 
 .PHONY: dirs clean
