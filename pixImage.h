@@ -69,6 +69,7 @@ class PixImage{
     PalettePair *palette_pairs;
     int *palette_assign; //<- palette assignment for each superpixel
     LabColor *palette_lab; //<- palette array with color values in palette
+    LabColor *average_palette; //<- average palette array with average color values
     bool palette_complete;
 
     float *prob_c;         //<- array of probabiities that a color in the palette is set to ANY super pixel
@@ -94,14 +95,19 @@ class PixImage{
     int *cuDev_palette_size;      //<- POINTER SO WE CAN MODIFY
     PalettePair *cuDev_palette_pairs;
     int *cuDev_palette_assign;
-    LabColor *cuDev_palette_lab;
+    LabColor *cuDev_palette_lab; 
+    LabColor *cuDev_average_palette; //<- average palette array with average color values
     bool *cuDev_palette_complete; //<- POINTER SO WE CAN MODIFY
 
     float *cuDev_prob_c;         
     float *cuDev_prob_c_if_sp;   
 
     // Temperature
-    float *cuDev_T;   //<- Current temperature
+    float *cuDev_T;   //<- POINTER SO WE CAN MODIFY
+
+    // Bool thingy
+    bool *cuDev_converged; //<- POINTER SO WE CAN MODIFY
+
     
     /**
      * @brief Construct a new Pix Image object
