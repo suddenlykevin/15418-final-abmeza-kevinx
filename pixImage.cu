@@ -800,6 +800,16 @@ __global__ void kernelRefinePalette() {
                     #ifdef RUNF_DEBUG
                     printf("COMPLETE\n");                        
                     #endif
+                    
+                    #ifdef RUN_DEBUG
+                    printf("averaging... %d ", palette_size);
+                    #endif
+
+                    getAveragedPalette();
+
+                    #ifdef RUN_DEBUG
+                    printf("averaged... ");
+                    #endif
 
                     condensePalette();
                     break;
@@ -1054,15 +1064,7 @@ void PixImage :: condensePalette() {
     float new_prob_c_if_sp[K_colors * 2 * N_pix];
     int new_palette_assign[N_pix];
     
-    #ifdef RUN_DEBUG
-    printf("averaging... %d ", palette_size);
-    #endif
-
-    getAveragedPalette();
-
-    #ifdef RUN_DEBUG
-    printf("averaged... ");
-    #endif
+  
 
     // for each pair, condense to average
     for(int j = 0; j < palette_size >> 1; ++j) {
