@@ -77,6 +77,27 @@ class PixImage{
     
     // Temperature
     float T;   //<- Current temperature
+
+
+    // Cuda Device versions of values               
+    unsigned char *cuDev_input_img; 
+    LabColor *cuDev_input_img_lab;  
+
+    unsigned char *cuDev_output_img; 
+    unsigned char *cuDev_spoutput_img; 
+    LabColor *cuDev_buf_lab;        
+
+    FloatVec *cuDev_superPixel_pos; 
+    LabColor *cuDev_sp_mean_lab;  
+    int *cuDev_region_map;     
+
+    PalettePair *cuDev_palette_pairs;
+    int *cuDev_palette_assign;
+    LabColor *cuDev_palette_lab;
+    bool *cuDev_palette_complete; //<- POINTER SO WE CAN MODIFY
+
+    float *cuDev_prob_c;         
+    float *cuDev_prob_c_if_sp;   
     
     /**
      * @brief Construct a new Pix Image object
@@ -89,9 +110,14 @@ class PixImage{
      * @param K           number of colors desired for output image
      */
     PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, int out_h, int K);
+   
+    /**
+     * @brief Allocates space for all important variables
+     */
+    void initVariables();
 
     /**
-     * @brief Initializes all values, run in initialize step
+     * @brief Initializes all starter values, for the algorithm
      */
     void initialize();
 

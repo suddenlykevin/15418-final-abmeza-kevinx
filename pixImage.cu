@@ -3,7 +3,9 @@
  * @author Kevin Xie (kevinx) 
  *         Anthony Meza (abmeza)
  * @brief Implementation of PixImage. Also a replica off pixImage.cpp, but 
- *        created in order to implement cuda
+ *        created in order to implement cuda. Some of the structure was 
+ *        inspired by assignment 2 in 15418 which also used cuda to render
+ *        circles on a grid.
  * 
  * @version 0.1
  * @date 2022-04-22
@@ -31,7 +33,48 @@
 using namespace std;
 
 
+//********************************************************//
+//*******************  GLOBAL VARIABLES ******************//
+//********************************************************//
 
+// storage for global constants that usble by GPU
+struct GlobalConstants {
+    // Input Image Content 
+    int in_width, in_height;  //<- width and height of input_img, gives pixel dimensions
+    int M_pix;                //<- # of pixels from the input image (M from paper)
+    unsigned char *input_img; //<- input image loaded, uses rgb values for pixels (0-255)
+    LabColor *input_img_lab;  //<- input image, using cielab values 
+
+    // Output Image 
+    int out_width, out_height; //<- output version of width, height
+    int N_pix;                 //<- # of pixels in the output image (N from paper)
+    unsigned char *output_img; //<- output version of input_img
+    unsigned char *spoutput_img; //<- debug output for superpixels
+    LabColor *buf_lab;         //<- buffer for smoothing and palette refinement
+
+    // Superpixel calculation 
+    FloatVec *superPixel_pos; //<- Super pixel coordinate positions "on input image"
+    LabColor *sp_mean_lab;  //<- superpixel mean color value
+    int *region_map;      //<- array with values for pixels associated with a specific superpixel 
+
+    // Palette 
+    int K_colors;          //<- number of colors we aim to use in the pallette
+    int palette_size;      //<- Current # of colors stored in palette_lab
+    PalettePair *palette_pairs;
+    int *palette_assign; //<- palette assignment for each superpixel
+    LabColor *palette_lab; //<- palette array with color values in palette
+    bool *palette_complete; //<- POINTER SO WE CAN MODIFY
+
+    float *prob_c;         //<- array of probabiities that a color in the palette is set to ANY super pixel
+    float * prob_sp;       //<- POINTER SO WE CAN MODIFY array of probabiities of each super pixel TODO:EDIT
+    float *prob_c_if_sp;   //<- List of P(c_k|p_s) values for all superpixels
+    
+    // Temperature
+    float T;   //<- Current temperature
+};
+
+// Constant for GPU
+__constant__ GlobalConstants cuGlobalConsts;
 
 //********************************************************//
 //*******************  KERNAL FUNCTIONS ******************//
@@ -56,13 +99,58 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
     M_pix = in_width * in_height;
     N_pix = out_width * out_height;
 
+    // Initialze basic values
     palette_complete = false;
+    palette_size = 0; 
     
     #ifdef TIMING
         //Timing variables
         startAllTime=0.f;
         endAllTime=0.f; 
     #endif
+
+    // Init Them Arrays
+    input_img = NULL; 
+    input_img_lab = NULL;
+
+    output_img = NULL; 
+    spoutput_img = NULL; 
+    buf_lab = NULL;  
+
+    superPixel_pos = NULL; 
+    sp_mean_lab = NULL; 
+    region_map = NULL;  
+
+    palette_pairs = NULL;
+    palette_assign = NULL; 
+    palette_lab = NULL; 
+
+    prob_c = NULL;      
+    prob_sp = 0.0f;      
+    prob_c_if_sp = NULL;   
+
+    T = 0.0f;  
+
+
+    // Cuda Device versions of values               
+    cuDev_input_img = NULL; 
+    cuDev_input_img_lab = NULL;  
+
+    cuDev_output_img = NULL; 
+    cuDev_spoutput_img = NULL; 
+    cuDev_buf_lab = NULL;        
+
+    cuDev_superPixel_pos = NULL; 
+    cuDev_sp_mean_lab = NULL;  
+    cuDev_region_map = NULL;     
+
+    cuDev_palette_pairs = NULL;
+    cuDev_palette_assign = NULL;
+    cuDev_palette_lab = NULL;
+    cuDev_palette_complete = NULL;
+
+    cuDev_prob_c = NULL;         
+    cuDev_prob_c_if_sp = NULL;   
 }
 
 
@@ -281,7 +369,7 @@ void PixImage :: condensePalette() {
     #endif
 }
 
-void PixImage :: initialize(){
+void PixImage :: initVariables(){
     ///*** Allocate Array Space ***///
     input_img_lab = (LabColor *) wrp_calloc(M_pix, sizeof(LabColor));
 
@@ -298,7 +386,71 @@ void PixImage :: initialize(){
 
     buf_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor));
     output_img = (unsigned char *) wrp_malloc(N_pix * 3); 
+    spoutput_img = (unsigned char *) wrp_calloc(M_pix*3, sizeof(unsigned char));
     sp_mean_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor)); 
+
+    // Allocate space for Device, place in global for easy access
+
+    cudaMalloc(&cuDev_input_img, 3*M_pix*sizeof(unsigned char));
+    cudaMalloc(&cuDev_input_img_lab, M_pix* sizeof(LabColor));
+    cudaMalloc(&cuDev_output_img, N_pix * 3);
+    cudaMalloc(&cuDev_spoutput_img, M_pix*3*sizeof(unsigned char));
+    cudaMalloc(&cuDev_buf_lab, N_pix*sizeof(LabColor));
+    cudaMalloc(&cuDev_superPixel_pos, N_pix * sizeof(FloatVec));
+    cudaMalloc(&cuDev_sp_mean_lab, N_pix * sizeof(LabColor));
+    cudaMalloc(&cuDev_region_map, M_pix * sizeof(int));
+    cudaMalloc(&cuDev_palette_pairs, K_colors*sizeof(PalettePair));
+    cudaMalloc(&cuDev_palette_assign, N_pix *sizeof(int));
+    cudaMalloc(&cuDev_palette_lab, K_colors * 2 *sizeof(LabColor));
+    cudaMalloc(&cuDev_prob_c_if_sp, K_colors * 2 * N_pix * sizeof(float));
+        
+    cudaMalloc(&cuDev_palette_complete, sizeof(bool));
+    
+    // Set values to cuda variables (if calloc simply memset)
+
+    cudaMemcpy(cuDev_input_img, input_img, 3*M_pix*sizeof(unsigned char), cudaMemcpyHostToDevice);
+    cudaMemset(cuDev_input_img_lab, 0, M_pix* sizeof(LabColor));
+    cudaMemset(cuDev_output_img, 0, N_pix * 3);
+    cudaMemset(cuDev_spoutput_img, 0, M_pix*3*sizeof(unsigned char));
+    cudaMemset(cuDev_buf_lab, 0, N_pix*sizeof(LabColor));
+    cudaMemset(cuDev_superPixel_pos, 0, N_pix * sizeof(FloatVec));
+    cudaMemset(cuDev_sp_mean_lab, 0, N_pix * sizeof(LabColor));
+    cudaMemset(cuDev_region_map, 0, M_pix * sizeof(int));
+    cudaMemset(cuDev_palette_pairs, 0, K_colors*sizeof(PalettePair));
+    cudaMemset(cuDev_palette_assign,0, N_pix *sizeof(int));
+    cudaMemset(cuDev_palette_lab, 0,K_colors * 2 *sizeof(LabColor));
+    cudaMemset(cuDev_prob_c_if_sp,0, K_colors * 2 * N_pix * sizeof(float));
+        
+    cudaMemset(cuDev_palette_complete,false, sizeof(bool));
+    
+
+    // Initialize parameters in constant memory.  We didn't talk about
+    // constant memory in class, but the use of read-only constant
+    // memory here is an optimization over just sticking these values
+    // in device global memory.  NVIDIA GPUs have a few special tricks
+    // for optimizing access to constant memory.  Using global memory
+    // here would have worked just as well.  See the Programmer's
+    // Guide for more information about constant memory.
+
+    GlobalConstants params;
+    params.in_width = in_width;
+    params.in_height = in_height;
+    params.M_pix = M_pix;
+    params.input_img = cuDev_input_img;
+    params.input_img_lab = cuDev_input_img_lab;
+
+    params.out_width = out_width;
+    params.out_height = out_height;
+    params.N_pix = N_pix;
+    params.output_img = cuDev_output_img;
+    params.spoutput_img = cuDev_spoutput_img;
+    
+
+    cudaMemcpyToSymbol(cuConstRendererParams, &params, sizeof(GlobalConstants)); 
+
+}
+void PixImage :: initialize(){
+    initVariables();
 
     ///*** Create input_img_lab version ***///
     unsigned char *p; LabColor *pl;
@@ -738,7 +890,6 @@ void PixImage :: runPixelate(){
         }
     }
 
-    spoutput_img = (unsigned char *) wrp_calloc(M_pix*3, sizeof(unsigned char));
     
     for (int j = 0; j < in_height; j++) {
         for (int i = 0; i < in_width; i++) {
