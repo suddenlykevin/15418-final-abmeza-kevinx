@@ -13,6 +13,62 @@
  * 
  */
 
+/**
+ * @brief data structure for Lab color scheme
+ */
+typedef struct {
+    float L;   //< L value, represents light
+    float a;   //< a value, represents TODO
+    float b;   //< b value, repereents TODO
+} LabColor;
+
+
+// computes eigendecomposition of real 3x3 hermitian matrix and 
+// returns maximum eigenvalue/vector
+//
+// closed-form solution based on https://hal.archives-ouvertes.fr/hal-01501221/document
+int maxEigen3(float *matrix, float *value, LabColor *vector);
+
+/**
+ * @brief Performs the SILC algorithm to help figure out the superpixel contents
+ * 
+ * @param m 
+ * @param S 
+ * @param l_k 
+ * @param a_k 
+ * @param b_k 
+ * @param x_k 
+ * @param y_k 
+ * @param l_i 
+ * @param a_i 
+ * @param b_i 
+ * @param x_i 
+ * @param y_i 
+ * @return float 
+ */
+float dist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
+           float l_i, float a_i, float b_i, int x_i, int y_i);
+
+//implements a gaussian function with std "sigma" and mean "mean"
+float gaussian(float x, float sigma, float mean);
+
+/**
+ * @brief wrapper for malloc to check for errors in allocation
+ * 
+ * @param size   size of item being allocated
+ * @return void* pointer to space allocated
+ */
+void* wrp_malloc(size_t size);
+
+/**
+ * @brief wrapper for calloc to check for errors in allocation
+ * 
+ * @param nitems number of items to allocated
+ * @param size   size of item being allocated
+ * @return void* pointer to space allocated
+ */
+void* wrp_calloc(size_t nitems, size_t size);
+
 
 /****************************************************************************************\
 *                                     RGB <-> L*a*b*                                     *

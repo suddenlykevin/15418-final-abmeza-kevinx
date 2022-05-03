@@ -19,7 +19,6 @@
 
 // Import util libraries
 #include "CycleTimer.h"
-#include "colorConv.h"
 #include "pixImage.h"
 
 #include <stdio.h>
@@ -29,128 +28,6 @@
 #include <stack>
 #include <cmath>
 using namespace std;
-
-// computes eigendecomposition of real 3x3 hermitian matrix and 
-// returns maximum eigenvalue/vector
-//
-// closed-form solution based on https://hal.archives-ouvertes.fr/hal-01501221/document
-int maxEigen3(float *matrix, float *value, LabColor *vector) {
-    
-    // extract unique values from top triangle
-    float a = matrix[0];
-    float b = matrix[4];
-    float c = matrix[8];
-    float d = matrix[1];
-    float e = matrix[5];
-    float f = matrix[3];
-
-    float x_1 = a*a + b*b + c*c - a*b - a*c - b*c + 3*(d*d + f*f + e*e);
-    float x_2 = -(2*a - b - c) * (2*b - a - c) * (2*c - a - b) + 
-                9*((2*c - a - b)*d*d + (2*b - a - c)*f*f + (2*a - b - c)*e*e) - 54*d*e*f;
-    
-    float phi;
-    if (x_2 > 0) {
-        phi = atan(sqrt(4*(x_1*x_1*x_1) - x_2*x_2)/x_2);
-    } else if (x_2 == 0) {
-        phi = M_PI/2;
-    } else {
-        phi = atan(sqrt(4*(x_1*x_1*x_1) - x_2*x_2)/x_2) + M_PI;
-    }
-
-    float lam_1 = (a + b + c - 2*sqrt(x_1)*cos(phi/3))/3;
-    float lam_2 = (a + b + c + 2*sqrt(x_1)*cos((phi - M_PI)/3))/3;
-    float lam_3 = (a + b + c + 2*sqrt(x_1)*cos((phi + M_PI)/3))/3;
-
-    float lam = (lam_2 > lam_1) ? lam_2 : ((lam_3 > lam_1) ? lam_3 : lam_1);
-
-    // unlikely special case causes divide by zero
-    if (f == 0 || f*(b-lam)-d*e == 0) {
-        printf("(f: %f, b: %f, lam: %f, d: %f, e: %f)\n", f, b, lam, d, e);
-        return -1;
-    }
-
-    // store highest eigenvalue
-    * value = lam;
-
-    float m = (d*(c-lam)-e*f)/(f*(b-lam)-d*e);
-
-    float v_0 = (lam - c - e*m)/f;
-
-    // store associated eigenvector
-    vector->L = v_0;
-    vector->a = m;
-    vector->b = 1.f;
-
-    return 0;
-}
-
-
-/**
- * @brief Performs the SILC algorithm to help figure out the superpixel contents
- * 
- * @param m 
- * @param S 
- * @param l_k 
- * @param a_k 
- * @param b_k 
- * @param x_k 
- * @param y_k 
- * @param l_i 
- * @param a_i 
- * @param b_i 
- * @param x_i 
- * @param y_i 
- * @return float 
- */
-float dist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
-           float l_i, float a_i, float b_i, int x_i, int y_i) {
-    float d_lab = sqrt(pow(l_k - l_i, 2.f) + pow(a_k - a_i, 2.f) + pow(b_k - b_i, 2.f));
-    float d_xy = sqrt(pow((float) x_k - x_i, 2.f) + pow((float) y_k - y_i, 2.f));
-    float k = ((float) m) / S;
-    return d_lab + k * d_xy;
-}
-
-//implements a gaussian function with std "sigma" and mean "mean"
-float gaussian(float x, float sigma, float mean) {
-    return exp((x-mean)*(x-mean)/(-2.0f*sigma*sigma))/sqrt(6.28319*sigma*sigma);
-}
-
-/**
- * @brief wrapper for malloc to check for errors in allocation
- * 
- * @param size   size of item being allocated
- * @return void* pointer to space allocated
- */
-void* wrp_malloc(size_t size){ 
-    void* ptr = malloc(size);
-
-    // Check that no error occured
-    if (ptr == NULL) {
-        printf("Unable to allocate memory with malloc of size %zu\n", size);
-        exit(1);
-    }
-
-    return ptr;
-}
-
-/**
- * @brief wrapper for calloc to check for errors in allocation
- * 
- * @param nitems number of items to allocated
- * @param size   size of item being allocated
- * @return void* pointer to space allocated
- */
-void* wrp_calloc(size_t nitems, size_t size){ 
-    void* ptr = calloc(nitems, size);
-
-    // Check that no error occured
-    if (ptr == NULL) {
-        printf("Unable to allocate memory with calloc of items %zu and size %zu\n", nitems, size);
-        exit(1);
-    }
-
-    return ptr;
-}
 
 
 
@@ -512,7 +389,7 @@ void PixImage :: runPixelate(){
         getAveragedPalette(average_palette);
         #ifdef RUN_DEBUG
         printf("DONE\n");
-        #endif'
+        #endif
 
         #ifdef RUN_DEBUG
         printf("associate...\n");

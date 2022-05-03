@@ -11,6 +11,7 @@
  * 
  */
 
+#include "helper.h"
 
 
 // GLOBAL CONSTANTS
@@ -31,15 +32,6 @@ typedef struct {
     float x;   //< x coor
     float y;   //< y coor
 } FloatVec;
-
-/**
- * @brief data structure for Lab color scheme
- */
-typedef struct {
-    float L;   //< L value, represents light
-    float a;   //< a value, represents TODO
-    float b;   //< b value, repereents TODO
-} LabColor;
 
 typedef struct {
     int a;
