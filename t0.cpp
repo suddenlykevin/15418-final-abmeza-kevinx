@@ -23,7 +23,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image/stb_image_write.h"
 
-#include "util/CycleTimer.h"
+#include "CycleTimer.h"
 
 #include <stdio.h>
 #include <stdlib.h>

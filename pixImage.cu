@@ -1,8 +1,9 @@
 /**
- * @file pixImage.cpp
+ * @file pixImage.cu
  * @author Kevin Xie () 
  *          Anthony Meza (abmeza)
- * @brief Implementation of PixImage
+ * @brief Implementation of PixImage. Also a replica off pixImage.cpp, but 
+ *        created in order to implement cuda
  * 
  * @version 0.1
  * @date 2022-04-22
@@ -29,6 +30,17 @@
 #include <stack>
 #include <cmath>
 using namespace std;
+
+
+
+
+//********************************************************//
+//*******************  KERNAL FUNCTIONS ******************//
+//********************************************************//
+
+//********************************************************//
+//*******************  HELPER FUNCTIONS ******************//
+//********************************************************//
 
 // computes eigendecomposition of real 3x3 hermitian matrix and 
 // returns maximum eigenvalue/vector
@@ -153,6 +165,9 @@ void* wrp_calloc(size_t nitems, size_t size){
 }
 
 
+//********************************************************//
+//*******************  PIXEL FUNCTIONS  ******************//
+//********************************************************//
 
 
 PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, int out_h, int K){
