@@ -90,7 +90,8 @@ class PixImage{
     FloatVec *cuDev_superPixel_pos; 
     LabColor *cuDev_sp_mean_lab;  
     int *cuDev_region_map;     
-
+ 
+    int *cuDev_palette_size;      //<- POINTER SO WE CAN MODIFY
     PalettePair *cuDev_palette_pairs;
     int *cuDev_palette_assign;
     LabColor *cuDev_palette_lab;
@@ -98,6 +99,9 @@ class PixImage{
 
     float *cuDev_prob_c;         
     float *cuDev_prob_c_if_sp;   
+
+    // Temperature
+    float *cuDev_T;   //<- Current temperature
     
     /**
      * @brief Construct a new Pix Image object
