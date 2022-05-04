@@ -6,6 +6,10 @@
  *        created in order to implement cuda. Some of the structure was 
  *        inspired by assignment 2 in 15418 which also used cuda to render
  *        circles on a grid.
+ *
+ * @note  On GHC machine run the following to get cuda working:
+ *        export PATH=/usr/local/depot/cuda/bin:${PATH}
+ *        export LD_LIBRARY_PATH=/usr/local/depot/cuda/lib64/:${LD_LIBRARY_PATH}
  * 
  * @version 0.1
  * @date 2022-04-22
@@ -632,8 +636,7 @@ __global__ void kernelAssociatetoSuperPixels() {
     LabColor *average_palette = cuGlobalConsts.average_palette;
 
     //Global bois
-    float *distance = (float *)wrp_calloc(M_pix, sizeof(float));
-
+    float *distance = new float[M_pix];
 
     for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
     
@@ -673,7 +676,7 @@ __global__ void kernelAssociatetoSuperPixels() {
         }
     }
 
-    free(distance);
+    delete[] distance;
     }
 }
 /**

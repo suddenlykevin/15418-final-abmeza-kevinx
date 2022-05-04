@@ -1,8 +1,8 @@
 EXECUTABLE := t0
 LDFLAGS=-L/usr/local/depot/cuda-10.2/lib64/ -lcudart
-CU_FILES   := pixImage.cu
+CU_FILES   := pixImage.cu helper.cu 
 CU_DEPS    :=
-CC_FILES   := t0.cpp helper.cpp 
+CC_FILES   := t0.cpp
 LOGS	   := logs
 
 all: $(EXECUTABLE)
