@@ -13,7 +13,7 @@
 
 // Constants to regulate what we print
 //#define DEBUG     // misc. debug statements
-#define RUN_DEBUG // debug statements that check running progress
+//#define RUN_DEBUG // debug statements that check running progress
 #define TIMING // Calculate and print timing information
 
 
@@ -22,6 +22,8 @@
 #include "util/colorConv.h"
 #include "util/superPixel.h"
 #include "pixImage.h"
+
+#include <omp.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -188,6 +190,7 @@ void PixImage :: initSuperPixels(){
     float dy = (float) in_height/(float) out_height;
 
     // initialize superpixel positions (centers)
+    #pragma omp parallel for default(shared) schedule(dynamic)
     for (int j = 0; j < out_height; ++j) {
         for (int i = 0; i < out_width; ++i) {
 
@@ -205,6 +208,7 @@ void PixImage :: initSuperPixels(){
     }
 
     // Initial assignment of pixels to a specific superpxel  
+    #pragma omp parallel for default(shared) schedule(dynamic)
     for (int j = 0; j < in_height; ++j) {
         for (int i = 0; i < in_width; ++i) {
             // Calculate which superpixel to set
@@ -244,6 +248,7 @@ void PixImage :: updateSuperPixelMeans(){
     }
     
     // Repostion superpixels and update the output color pallete
+    #pragma omp parallel for default(shared) schedule(dynamic)
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             // Index of superpixel
@@ -527,7 +532,10 @@ void PixImage :: runPixelate(){
         #ifdef RUN_DEBUG
         printf("associate...\n");
         #endif
+
+        #pragma omp parallel for default(shared) schedule(dynamic)
         for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
+
         for (int j = 0; j < out_height; ++j) {
             for (int i = 0; i < out_width; ++i) {
                 
@@ -545,6 +553,7 @@ void PixImage :: runPixelate(){
                 LabColor sp_color = average_palette[palette_assign[idx]];
 
                 // within region
+                #pragma omp parallel for default(shared) schedule(dynamic)
                 for (int yy = min_y; yy <= max_y; ++yy) {
                     for (int xx = min_x; xx <= max_x; ++xx) {
                         int curr_idx = yy * in_width + xx;
@@ -578,6 +587,7 @@ void PixImage :: runPixelate(){
         #endif
 
         // smooth positions
+        #pragma omp parallel for default(shared) schedule(dynamic)
         for (int j = 0; j < out_height; j++) {
             for (int i = 0; i < out_width; i++) {                
                 int spidx = j*out_width + i;
@@ -623,6 +633,7 @@ void PixImage :: runPixelate(){
         }
     
         // smooth colors
+        #pragma omp parallel for default(shared) schedule(dynamic)
         for(int j = 0; j < out_height; ++j) {
             for(int i = 0; i < out_width; ++i) {
 
@@ -738,6 +749,7 @@ void PixImage :: runPixelate(){
         #endif
         float palette_error = 0.f;
         //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
+        #pragma omp parallel for default(shared) schedule(dynamic) reduction(+:palette_error)
         for (int c = 0; c< palette_size; c++){
 
             LabColor c_sum = {0.0f,0.0f,0.0f};
@@ -890,9 +902,9 @@ void PixImage :: runPixelate(){
     //*** PRINT TIMING RESULTS ***//
     //*** ******************** ***//
     // Print Total Time to run algorithm (not include get image file and create image file)
-    printf("Overall: %.3f s\n", 1000.f * (endAllTime - startAllTime));
+    printf("Overall: %.3f ms\n", 1000.f * (endAllTime - startAllTime));
     
-    printf("\t- Initialize: %.3f s\n", 1000.f * (endInitializeTime - startInitializeTime));
+    printf("\t- Initialize: %.3f ms\n", 1000.f * (endInitializeTime - startInitializeTime));
     #endif
 
 }

@@ -1,7 +1,7 @@
 APP_NAME=t0
 
 CXX=g++
-CXXFLAGS= -Wall -pedantic -lm
+CXXFLAGS= -pedantic -lm -I. -Wall -fopenmp -Wno-unknown-pragmas
 
 SRC =  t0.cpp pixImage.cpp util/colorConv.cpp util/superPixel.cpp util/CycleTimer.h
 

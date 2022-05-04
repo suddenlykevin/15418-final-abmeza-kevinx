@@ -15,6 +15,7 @@
  * 
  */
 
+#include <omp.h>
 #include "pixImage.h"
 
 // Import stb_image libraries
@@ -68,6 +69,7 @@ void usage(const char *progname){
     printf("  -x  --out_width  <INT>       pixel width of output image\n");
     printf("  -y  --out_height <INT>       pixel height of output image\n");
     printf("  -k  --K_COLORS   <INT>       colors present in the output image\n");
+    printf("  -n  --num_threads <INT>      number of OpenMP threads\n");
     printf("Program Options:\n");
     printf("  -?  --help                   open this usage help page\n");
 }
@@ -85,6 +87,7 @@ int main(int argc, char** argv) {
     int channels;              //<- number of channels for input_img (3:rgb or 4:rgba)
     unsigned char *input_img;  //<- input image loaded, uses rgb values for pixels (0-255)
     char *filename = NULL;     //<- Holder of input file name (default: NULL)
+    int num_threads = 1;
 
     // Output Image 
     int out_width = 30;        //<- user provided output width for image (default: 15)
@@ -100,7 +103,7 @@ int main(int argc, char** argv) {
 
     // PARSE + CHECK USER INPUT
     int opt; 
-    while ((opt = getopt(argc, argv, "f:x:y:k:")) != -1){
+    while ((opt = getopt(argc, argv, "f:x:y:k:n:")) != -1){
         switch (opt) {
         case 'f':
             filename = optarg;
@@ -114,7 +117,9 @@ int main(int argc, char** argv) {
         case 'k':
             K_colors = atoi(optarg);
             break;
-    
+        case 'n':
+            num_threads = atoi(optarg);
+            break;
         case '?':
         default:
             usage(argv[0]);
@@ -129,6 +134,8 @@ int main(int argc, char** argv) {
         return -1;
     }
     
+    omp_set_num_threads(num_threads);
+
     //*** ******************* ***//
     //*** PROCESS INPUT IMAGE ***//
     //*** ******************* ***//
