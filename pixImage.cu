@@ -93,9 +93,33 @@ struct GlobalConstants {
 __constant__ GlobalConstants cuGlobalConsts;
 
 
-//**********************************************************************//
-//*******************  INLINE KERNEL HELPER FUNCTIONS ******************//
-//**********************************************************************//
+//*********************************************************************//
+//******************* INLINE KERNEL HELPER FUNCTIONS ******************//
+//*********************************************************************//
+
+/**
+ * @brief max function
+ * 
+ * @param item1 
+ * @param item2 
+ * @return int 
+ */
+__device__ __inline__ int cuDevMax(int item1, int item2) {
+    return (item1 >= item2) ? item1 : item2;
+}
+
+/**
+ * @brief min function
+ * 
+ * @param item1 
+ * @param item2 
+ * @return int
+ */
+__device__ __inline__ int cuDevMin(int item1, int item2) {
+    return (item1 >= item2) ? item2 : item2;
+}
+
+
 
 __device__ __inline__ int cuDevMaxEigen3(float *matrix, float *value, LabColor *vector) {
     
@@ -212,22 +236,22 @@ __device__ __inline__ float cuDevF_func(float t){
 }
 
 __device__ __inline__ float cuDevXYZtoL(float X, float Y, float Z) {
-    Y = f_func(Y);
+    Y = cuDevF_func(Y);
 
     return Y*labLScale_32f - labLShift_32f;
 
 }
 
 __device__ __inline__ float cuDevXYZtoA(float X, float Y, float Z) {
-    X = f_func(X);
-    Y = f_func(Y);
+    X = cuDevF_func(X);
+    Y = cuDevF_func(Y);
     
     return 500.f*(X - Y);
 }
 
 __device__ __inline__ float cuDevXYZtoB(float X, float Y, float Z) {
-    Y = f_func(Y);
-    Z = f_func(Z);
+    Y = cuDevF_func(Y);
+    Z = cuDevF_func(Z);
 
     return 200.f*(Y - Z);
 }
@@ -264,34 +288,34 @@ __device__ __inline__ float cuDevLABtoX(float L, float a, float b) {
     float fy = (L + labLShift_32f)/labLScale_32f;
     float fx = fy + a*labAScale_32f;
     
-    return fInv_func(fx);
+    return cuDevFInv_func(fx);
 }
 
 __device__ __inline__ float cuDevLABtoY(float L, float a, float b) {
     float fy = (L + labLShift_32f)/labLScale_32f;
 
-    return fInv_func(fy);
+    return cuDevFInv_func(fy);
 }
 
 __device__ __inline__ float cuDevLABtoZ(float L, float a, float b) {
     float fy = (L + labLShift_32f)/labLScale_32f;
     float fz = fy - b*labBScale_32f;
 
-    return fInv_func(fz);
+    return cuDevFInv_func(fz);
 }
 
 __device__ __inline__ void cuDevrgb2lab(int R, int G, int B, float *L, float *a, float *b) {
     // printf("_RGB2LAB_\n");
     // printf("(R:%d,G:%d,B:%d)->",R,G,B);
-    float Rf = linearize(R);
-    float Gf = linearize(G);
-    float Bf = linearize(B);
+    float Rf = cuDevLinearize(R);
+    float Gf = cuDevLinearize(G);
+    float Bf = cuDevLinearize(B);
     
     // printf("(Rf:%f,Bf:%f,Gf:%f)->",Rf,Gf,Bf);
 
-    float X = RGBtoX(Rf, Gf, Bf);
-    float Y = RGBtoY(Rf, Gf, Bf);
-    float Z = RGBtoZ(Rf, Gf, Bf);
+    float X = cuDevRGBtoX(Rf, Gf, Bf);
+    float Y = cuDevRGBtoY(Rf, Gf, Bf);
+    float Z = cuDevRGBtoZ(Rf, Gf, Bf);
     
     // printf("(X:%f,Y:%f,Z:%f)->",X,Y,Z);
 
@@ -301,9 +325,9 @@ __device__ __inline__ void cuDevrgb2lab(int R, int G, int B, float *L, float *a,
     
     // printf("(XS:%f,YS:%f,ZS:%f)->",X,Y,Z);
 
-    *L = XYZtoL(X, Y, Z);
-    *a = XYZtoA(X, Y, Z);
-    *b = XYZtoB(X, Y, Z);
+    *L = cuDevXYZtoL(X, Y, Z);
+    *a = cuDevXYZtoA(X, Y, Z);
+    *b = cuDevXYZtoB(X, Y, Z);
     
     // printf("(L:%f,a:%f,b:%f)\n",*L,*a,*b);
 }
@@ -311,9 +335,9 @@ __device__ __inline__ void cuDevrgb2lab(int R, int G, int B, float *L, float *a,
 __device__ __inline__ void cuDevlab2rgb(float L, float a, float b, unsigned char *R, unsigned char *G, unsigned char *B) {
     // printf("_LAB2RGB_\n");
     // printf("(L:%f,a:%f,b:%f)->",L,a,b);
-    float X = LABtoX(L, a, b);
-    float Y = LABtoY(L, a, b);
-    float Z = LABtoZ(L, a, b);
+    float X = cuDevLABtoX(L, a, b);
+    float Y = cuDevLABtoY(L, a, b);
+    float Z = cuDevLABtoZ(L, a, b);
     
     // printf("(XS:%f,YS:%f,ZS:%f)->",X,Y,Z);
     X *= labXScaleInv_32f;
@@ -322,15 +346,15 @@ __device__ __inline__ void cuDevlab2rgb(float L, float a, float b, unsigned char
 
     // printf("(X:%f,Y:%f,Z:%f)->",X,Y,Z);
 
-    float Rf = XYZtoR(X, Y, Z);
-    float Gf = XYZtoG(X, Y, Z);
-    float Bf = XYZtorgB(X, Y, Z);
+    float Rf = cuDevXYZtoR(X, Y, Z);
+    float Gf = cuDevXYZtoG(X, Y, Z);
+    float Bf = cuDevXYZtorgB(X, Y, Z);
 
     // printf("(Rf:%f,Bf:%f,Gf:%f)->",Rf,Gf,Bf);
 
-    *R = delin(Rf);
-    *G = delin(Gf);
-    *B = delin(Bf);
+    *R = cuDevDelin(Rf);
+    *G = cuDevDelin(Gf);
+    *B = cuDevDelin(Bf);
     // printf("(R:%d,G:%d,B:%d)",*R,*G,*B);
 }
 
@@ -656,8 +680,6 @@ __global__ void kernelInitSuperPixels() {
 
             // Set Value
             region_map[in_width * j + i] = out_width * y + x;
-
-
         }
     }
 
@@ -888,10 +910,10 @@ __global__ void kernelAssociatetoSuperPixels() {
             // get local region
             int idx = out_width * j + i;
             FloatVec center = superPixel_pos[idx];
-            int min_x = std::max(0.0f, center.x - S);
-            int min_y = std::max(0.0f, center.y - S);
-            int max_x = std::min((float) (in_width - 1), center.x + S);
-            int max_y = std::min((float) (in_height - 1), center.y + S);            
+            int min_x = (int) fmaxf(0.0f, center.x - S);
+            int min_y = (int) fmaxf(0.0f, center.y - S);
+            int max_x = (int) fminf((float) (in_width - 1), center.x + S);
+            int max_y = (int) fminf((float) (in_height - 1), center.y + S);            
             //printf("iter %d superpixel %d: (%d, %d) -> (%d, %d)\n", iter, out_width * j + i, min_x, min_y, max_x, max_y);
             int x = (int) round(center.x);
             int y = (int) round(center.y);
@@ -904,7 +926,7 @@ __global__ void kernelAssociatetoSuperPixels() {
                     int curr_idx = yy * in_width + xx;
 
                     // check new distance
-                    float dist_new = dist_k(m_gerstner, S, sp_color.L, sp_color.a, sp_color.b, 
+                    float dist_new = cuDevDist_k(m_gerstner, S, sp_color.L, sp_color.a, sp_color.b, 
                                             x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
                                             input_img_lab[curr_idx].b, xx, yy);
 
@@ -992,10 +1014,10 @@ __global__ void kernelSmoothPositions() {
         for(int i = 0; i < out_width; ++i) {
 
         //get bounds of 3x3 kernel (make sure we don't go off the image)
-        int min_x = std::max(0,i-1);
-        int max_x = std::min(out_width-1,i+1);
-        int min_y = std::max(0,j-1);
-        int max_y = std::min(out_height-1,j+1);
+        int min_x = cuDevMax(0,i-1);
+        int max_x = cuDevMin(out_width-1,i+1);
+        int min_y = cuDevMax(0,j-1);
+        int max_y = cuDevMin(out_height-1,j+1);
 
         //Initialize
         LabColor sum = {0.f, 0.f, 0.f};
@@ -1013,9 +1035,9 @@ __global__ void kernelSmoothPositions() {
             float d_color = (float) sqrt(pow(superpixel_color.L - c_n.L, 2.f) +
                                             pow(superpixel_color.a - c_n.a, 2.f) +
                                             pow(superpixel_color.b - c_n.b, 2.f));
-            float w_color = gaussian(d_color, 2.0f ,0.0f);
-            float d_pos = (float) sqrt(pow(i-ii, 2.f) + pow(j-jj, 2.f));
-            float w_pos = gaussian(d_pos, 0.97f, 0.0f);
+            float w_color = cuDevGaussian(d_color, 2.0f ,0.0f);
+            float d_pos = (float) sqrt(pow((float) i-ii, 2.f) + pow((float) j-jj, 2.f));
+            float w_pos = cuDevGaussian(d_pos, 0.97f, 0.0f);
             float w_total = w_color*w_pos;
 
             weight += w_total;
@@ -1186,7 +1208,7 @@ __global__ void kernelRefinePalette() {
         if ((*T) <= kTF) {
             (*converged) = true;
         } else {
-            (*T) = std::max((*T)*kDT, kTF);
+            (*T) = fmaxf((*T)*kDT, kTF);
         }
         
         // if palette is incomplete
@@ -1253,17 +1275,11 @@ __global__ void kernelRefinePalette() {
                     inlineCondensePalette();
                     break;
                 }
-            }
-            
+            }       
             delete[] splits;
         }
     }
-
-
-
     }
-
-
 }
 
 /**
@@ -1296,7 +1312,7 @@ __global__ void kernelProcessOutputImage() {
             int idx = j*out_width + i;
             LabColor color = average_palette[palette_assign[idx]];
 
-            lab2rgb(color.L, color.a, color.b, 
+            cuDevlab2rgb(color.L, color.a, color.b, 
                     &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
 
         }
