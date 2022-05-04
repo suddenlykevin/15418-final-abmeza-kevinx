@@ -79,6 +79,8 @@ class PixImage{
     // Temperature
     float T;   //<- Current temperature
 
+    // extra stuff
+    float S;
 
     // Cuda Device versions of values               
     unsigned char *cuDev_input_img; 
@@ -105,7 +107,7 @@ class PixImage{
     // Temperature
     float *cuDev_T;   //<- POINTER SO WE CAN MODIFY
 
-    // Bool thingy
+    // extra stuff
     bool *cuDev_converged; //<- POINTER SO WE CAN MODIFY
 
     
@@ -140,11 +142,7 @@ class PixImage{
 
     void updateSuperPixelMeans();
 
-    void pushPaletteColor(LabColor color, float prob);
-
-    void pushPalettePair(int a, int b);
-
-    void getAveragedPalette(LabColor *avg_palette);
+    void getAveragedPalette();
 
     /**
      * @brief Runs the entire algorithm that initializes variables and
@@ -153,10 +151,6 @@ class PixImage{
     void runPixelate();
 
     void getMajorAxis(int palette_index, float *value, LabColor *vector);
-
-    void splitColor(int pair_index);
-
-    void condensePalette();
 
     /**
      * @brief Frees everything that has been alocated after running runPixelate 
