@@ -159,3 +159,4 @@ void rgb2lab(int R, int G, int B, float *L, float *a, float *b);
  * @param[in] b axis (-128 - 128)
  **/
 void lab2rgb(float L, float a, float b, unsigned char *R, unsigned char *G, unsigned char *B);
+

@@ -13,7 +13,6 @@
 
 #include "helper.h"
 
-
 // GLOBAL CONSTANTS
 const float T_f = 1.0f; //<- T final, dictates when we finish our core algorithm (TODO: Edit)
 const int m_gerstner = 45; //<- 
