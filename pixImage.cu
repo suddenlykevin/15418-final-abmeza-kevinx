@@ -218,6 +218,15 @@ __global__ void kernelUpdateSuperPixelMeans() {
             // Index of superpixel
             int spidx = j*out_width + i;
 
+            if (sp_count[spidx] == 0) {
+                float dx = (float) in_width/(float) out_width;
+                float dy = (float) in_height/(float) out_height;
+                float x = ((float) i + 0.5f) * dx;
+                float y = ((float) j + 0.5f) * dy;
+                sp_mean_lab[spidx] = input_img_lab[((int) round(y))*in_width + ((int) round(x))];
+                continue;
+            }
+
             // Calculate new position for super pixel
             float x = sp_sums[spidx].x / sp_count[spidx];
             float y = sp_sums[spidx].y / sp_count[spidx];
