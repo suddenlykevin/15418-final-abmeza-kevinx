@@ -24,6 +24,11 @@
 #include "CycleTimer.h"
 #include "pixImage.h"
 
+
+#include <cuda.h>
+#include <cuda_runtime.h>
+#include <driver_functions.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -361,6 +366,7 @@ __global__ void kernelAssosiatetoSuperPixels() {
     LabColor *palette_lab = cuGlobalConsts.palette_lab;
     int *palette_assign = cuGlobalConsts.palette_assign;
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
+    LabColor *average_palette = cuGlobalConsts.average_palette;
 
     //Global bois
     float *distance = (float *)wrp_calloc(M_pix, sizeof(float));
@@ -382,7 +388,7 @@ __global__ void kernelAssosiatetoSuperPixels() {
             int x = (int) round(center.x);
             int y = (int) round(center.y);
 
-            LabColor sp_color = palette_lab[palette_assign[idx]];
+            LabColor sp_color = average_palette[palette_assign[idx]];
 
             // within region
             for (int yy = min_y; yy <= max_y; ++yy) {
@@ -1483,4 +1489,5 @@ void PixImage :: freeAll(){
     free(prob_c); 
 
     free(buf_lab);
+    
 }

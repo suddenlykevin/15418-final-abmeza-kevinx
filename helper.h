@@ -13,6 +13,8 @@
  * 
  */
 
+#include <stddef.h>
+
 /**
  * @brief data structure for Lab color scheme
  */
