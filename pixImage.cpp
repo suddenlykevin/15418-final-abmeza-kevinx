@@ -190,7 +190,7 @@ void PixImage :: initSuperPixels(){
     float dy = (float) in_height/(float) out_height;
 
     // initialize superpixel positions (centers)
-    #pragma omp parallel for default(shared) schedule(dynamic)
+    #pragma omp parallel for
     for (int j = 0; j < out_height; ++j) {
         for (int i = 0; i < out_width; ++i) {
 
@@ -208,7 +208,7 @@ void PixImage :: initSuperPixels(){
     }
 
     // Initial assignment of pixels to a specific superpxel  
-    #pragma omp parallel for default(shared) schedule(dynamic)
+    #pragma omp parallel for
     for (int j = 0; j < in_height; ++j) {
         for (int i = 0; i < in_width; ++i) {
             // Calculate which superpixel to set
@@ -226,53 +226,65 @@ void PixImage :: initSuperPixels(){
 }
 
 void PixImage :: updateSuperPixelMeans(){
-    FloatVec sp_sums[N_pix];
-    memset(sp_sums, 0, N_pix*sizeof(FloatVec));
-    LabColor color_sums[N_pix];
-    memset(color_sums, 0, N_pix*sizeof(LabColor));
-    int sp_count[N_pix];
-    memset(sp_count, 0, N_pix*sizeof(int));
-    // Find the mean colors (from input image) for each superpixel
-    for (int j = 0; j < in_height; j++) {
-        for (int i = 0; i < in_width; i++) {
-            int idx = j*in_width + i;
-            int spidx = region_map[idx];
-            sp_count[spidx] ++;
-            sp_sums[spidx].x += i;
-            sp_sums[spidx].y += j;
+    #pragma omp parallel
+    {
+        int t = omp_get_thread_num();
+        int tcount = omp_get_num_threads();
+        int delta = (out_height + tcount) / tcount;
+        FloatVec sp_sums[out_width * delta];
+        memset(sp_sums, 0, out_width * delta *sizeof(FloatVec));
+        LabColor color_sums[out_width * delta];
+        memset(color_sums, 0, out_width * delta *sizeof(LabColor));
+        int sp_count[out_width * delta];
+        memset(sp_count, 0, out_width * delta *sizeof(int));
 
-            color_sums[spidx].L += input_img_lab[idx].L;
-            color_sums[spidx].a += input_img_lab[idx].a;
-            color_sums[spidx].b += input_img_lab[idx].b;
-        }
-    }
-    
-    // Repostion superpixels and update the output color pallete
-    #pragma omp parallel for default(shared) schedule(dynamic)
-    for (int j = 0; j < out_height; j++) {
-        for (int i = 0; i < out_width; i++) {
-            // Index of superpixel
-            int spidx = j*out_width + i;
+        // Find the mean colors (from input image) for each superpixel
+        for (int j = 0; j < in_height; j++) {
+            for (int i = 0; i < in_width; i++) {
+                int idx = j*in_width + i;
+                int spidx = region_map[idx];
 
-            if (sp_count[spidx] == 0) {
-                float dx = (float) in_width/(float) out_width;
-                float dy = (float) in_height/(float) out_height;
-                float x = ((float) i + 0.5f) * dx;
-                float y = ((float) j + 0.5f) * dy;
-                sp_mean_lab[spidx] = input_img_lab[((int) round(y))*in_width + ((int) round(x))];
-                continue;
+                if (spidx >= t * delta * out_width && spidx < (t + 1) * delta * out_width) {
+                    spidx -= t * delta * out_width;
+                    sp_count[spidx] ++;
+                    sp_sums[spidx].x += i;
+                    sp_sums[spidx].y += j;
+
+                    color_sums[spidx].L += input_img_lab[idx].L;
+                    color_sums[spidx].a += input_img_lab[idx].a;
+                    color_sums[spidx].b += input_img_lab[idx].b;
+                }
             }
+        }
+        
+        int max = ((t+1) * delta > out_height) ? out_height : (t+1) * delta;
+        // Repostion superpixels and update the output color pallete
+        for (int j = t * delta; j < max; j++) {
+            for (int i = 0; i < out_width; i++) {
+                // Index of superpixel
+                int spidx = j*out_width + i;
+                int blockidx = (j-t*delta)*out_width + i;
 
-            // Calculate new position for super pixel
-            float x = sp_sums[spidx].x / sp_count[spidx];
-            float y = sp_sums[spidx].y / sp_count[spidx];
-            FloatVec newpos = {x, y};
-            superPixel_pos[spidx] = newpos;
+                if (sp_count[blockidx] == 0) {
+                    float dx = (float) in_width/(float) out_width;
+                    float dy = (float) in_height/(float) out_height;
+                    float x = ((float) i + 0.5f) * dx;
+                    float y = ((float) j + 0.5f) * dy;
+                    sp_mean_lab[spidx] = input_img_lab[((int) round(y))*in_width + ((int) round(x))];
+                    continue;
+                }
 
-            // Set output_img_lab to new mean value
-            sp_mean_lab[spidx].L = color_sums[spidx].L/sp_count[spidx];
-            sp_mean_lab[spidx].a = color_sums[spidx].a/sp_count[spidx];
-            sp_mean_lab[spidx].b = color_sums[spidx].b/sp_count[spidx];
+                // Calculate new position for super pixel
+                float x = sp_sums[blockidx].x / sp_count[blockidx];
+                float y = sp_sums[blockidx].y / sp_count[blockidx];
+                FloatVec newpos = {x, y};
+                superPixel_pos[spidx] = newpos;
+
+                // Set output_img_lab to new mean value
+                sp_mean_lab[spidx].L = color_sums[blockidx].L/sp_count[blockidx];
+                sp_mean_lab[spidx].a = color_sums[blockidx].a/sp_count[blockidx];
+                sp_mean_lab[spidx].b = color_sums[blockidx].b/sp_count[blockidx];
+            }
         }
     }
 }
@@ -413,6 +425,7 @@ void PixImage :: initialize(){
     input_img_lab = (LabColor *) wrp_calloc(M_pix, sizeof(LabColor));
 
     superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
+    superPixel = (int *) wrp_calloc(M_pix, sizeof(int));
     region_map = (int *) wrp_calloc(M_pix, sizeof(int));
 
     palette_lab = (LabColor *) wrp_calloc(K_colors * 2 , sizeof(LabColor));
@@ -428,9 +441,11 @@ void PixImage :: initialize(){
     sp_mean_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor)); 
 
     ///*** Create input_img_lab version ***///
-    unsigned char *p; LabColor *pl;
-    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*3); p += 3, pl ++) 
-        rgb2lab(*p, *(p+1), *(p+2), &(pl->L), &(pl->a), &(pl->b));
+    #pragma omp parallel for
+    for(int p = 0; p < M_pix; p++) {
+        rgb2lab(input_img[p*3], input_img[p*3+1], input_img[p*3+2], 
+                &(input_img_lab[p].L), &(input_img_lab[p].a), &(input_img_lab[p].b));
+    }
 
     ///*** Initialize Superpixel Values ***///
     initSuperPixels();
@@ -533,40 +548,47 @@ void PixImage :: runPixelate(){
         printf("associate...\n");
         #endif
 
-        #pragma omp parallel for default(shared) schedule(dynamic)
-        for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
+        #pragma omp parallel for
+        for (int i = 0; i < M_pix; i++) {
+            distance[i] = -1.0f;
+            superPixel[i] = -1.0f;
+        }
 
-        for (int j = 0; j < out_height; ++j) {
-            for (int i = 0; i < out_width; ++i) {
+        // PER-PIXEL approach
+        #pragma omp parallel for
+        for (int i = 0; i < N_pix; i++) {
+            int idx = ((int) round(superPixel_pos[i].x)) + in_width * ((int) round(superPixel_pos[i].y));
+            superPixel[idx] = i;
+        }
+
+        #pragma omp parallel for schedule(dynamic)
+        for (int j = 0; j < in_height; ++j) {
+            for (int i = 0; i < in_width; ++i) {
                 
                 // get local region
-                int idx = out_width * j + i;
-                FloatVec center = superPixel_pos[idx];
-                int min_x = std::max(0.0f, center.x - S);
-                int min_y = std::max(0.0f, center.y - S);
-                int max_x = std::min((float) (in_width - 1), center.x + S);
-                int max_y = std::min((float) (in_height - 1), center.y + S);            
-                //printf("iter %d superpixel %d: (%d, %d) -> (%d, %d)\n", iter, out_width * j + i, min_x, min_y, max_x, max_y);
-                int x = (int) round(center.x);
-                int y = (int) round(center.y);
-
-                LabColor sp_color = average_palette[palette_assign[idx]];
+                int min_x = std::max(0.0f, i - S);
+                int min_y = std::max(0.0f, j - S);
+                int max_x = std::min((float) (in_width - 1), i + S);
+                int max_y = std::min((float) (in_height - 1), j + S); 
+                int curr_idx = j * in_width + i;
 
                 // within region
-                #pragma omp parallel for default(shared) schedule(dynamic)
                 for (int yy = min_y; yy <= max_y; ++yy) {
                     for (int xx = min_x; xx <= max_x; ++xx) {
-                        int curr_idx = yy * in_width + xx;
+                        int sp_idx = yy * in_width + xx;
+                        if (superPixel[sp_idx] >= 0) {
+                            LabColor sp_color = average_palette[palette_assign[superPixel[sp_idx]]];
 
-                        // check new distance
-                        float dist_new = dist_k(m_gerstner, S, sp_color.L, sp_color.a, sp_color.b, 
-                                                x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
-                                                input_img_lab[curr_idx].b, xx, yy);
+                            // check new distance
+                            float dist_new = dist_k(m_gerstner, S, sp_color.L, sp_color.a, sp_color.b, 
+                                                    xx, yy, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
+                                                    input_img_lab[curr_idx].b, i, j);
 
-                        // Check if the distance is less in order to minimize
-                        if (distance[curr_idx] < 0 || dist_new < distance[curr_idx]) {
-                            distance[curr_idx] = dist_new;
-                            region_map[curr_idx] = out_width*j + i;
+                            // Check if the distance is less in order to minimize
+                                if (distance[curr_idx] < 0 || dist_new < distance[curr_idx]) {
+                                    distance[curr_idx] = dist_new;
+                                    region_map[curr_idx] = superPixel[sp_idx];
+                                }
                         }
                     }
                 }
@@ -587,7 +609,9 @@ void PixImage :: runPixelate(){
         #endif
 
         // smooth positions
-        #pragma omp parallel for default(shared) schedule(dynamic)
+        FloatVec newSuperPixel_pos[N_pix];
+        
+        #pragma omp parallel for
         for (int j = 0; j < out_height; j++) {
             for (int i = 0; i < out_width; i++) {                
                 int spidx = j*out_width + i;
@@ -628,12 +652,14 @@ void PixImage :: runPixelate(){
                     newPos.y = 0.55f*pos.y + 0.45f*sum.y;
                 }
                 // printf("pos: (%f, %f) -> (%f, %f)\n", pos.x, pos.y, newPos.x, newPos.y);
-                superPixel_pos[spidx] = newPos;
+                newSuperPixel_pos[spidx] = newPos;
             }
         }
+
+        memcpy(superPixel_pos, newSuperPixel_pos, N_pix * sizeof(FloatVec));
     
         // smooth colors
-        #pragma omp parallel for default(shared) schedule(dynamic)
+        #pragma omp parallel for
         for(int j = 0; j < out_height; ++j) {
             for(int i = 0; i < out_width; ++i) {
 
@@ -682,7 +708,6 @@ void PixImage :: runPixelate(){
         #endif
         //update the SP mean colors with the smoothed values
         memcpy(sp_mean_lab, buf_lab, N_pix * sizeof(LabColor));
-        
         //*** ************************************** ***//
         //*** (4.3) ASSOSIATE SUPERPIXELS TO PALETTE ***//
         //*** ************************************** ***//
@@ -727,7 +752,7 @@ void PixImage :: runPixelate(){
 
             // update palette assignment
             palette_assign[p] = best_c;
-
+            
             for(int c = 0; c < palette_size; c++) {
                 double p_norm = probs[c]/sum_prob;
                 prob_c_if_sp[c*(N_pix) + p] = p_norm;
@@ -749,7 +774,7 @@ void PixImage :: runPixelate(){
         #endif
         float palette_error = 0.f;
         //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
-        #pragma omp parallel for default(shared) schedule(dynamic) reduction(+:palette_error)
+        #pragma omp parallel for schedule(dynamic) reduction(+:palette_error)
         for (int c = 0; c< palette_size; c++){
 
             LabColor c_sum = {0.0f,0.0f,0.0f};
@@ -795,6 +820,7 @@ void PixImage :: runPixelate(){
             if (!palette_complete) {
                 int splits[K_colors];
                 int curr = 0;
+                //#pragma omp parallel for schedule(dynamic)
                 for (int i = 0; i < palette_size >> 1; i++) {
                     #ifdef DEBUG
                     // printf("(%d, %d)\n", palette_pairs[i].a, palette_pairs[i].b);
@@ -809,8 +835,8 @@ void PixImage :: runPixelate(){
                     // printf("%f, (%f, %f, %f), (%f, %f, %f)\n", error, color_a.L,color_a.a,color_a.b, color_b.L, color_b.a, color_b.b);
                     // determine if split or simply perturb 
                     if (error > kSubclusterTolerance) {
-                        splits[curr] = i;
-                        curr ++;
+                        #pragma omp critical
+                        splits[curr++] = i;
                     } else {
                         float value;
                         LabColor majorAxis;
@@ -858,6 +884,7 @@ void PixImage :: runPixelate(){
     LabColor averaged_palette[2*K_colors];
     getAveragedPalette(averaged_palette);
 
+    #pragma omp parallel for
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {
             int idx = j*out_width + i;
@@ -874,6 +901,7 @@ void PixImage :: runPixelate(){
 
     spoutput_img = (unsigned char *) wrp_calloc(M_pix*3, sizeof(unsigned char));
     
+    #pragma omp parallel for
     for (int j = 0; j < in_height; j++) {
         for (int i = 0; i < in_width; i++) {
             int idx = j*in_width + i;
@@ -910,14 +938,22 @@ void PixImage :: runPixelate(){
 }
 
 void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector) {
-    float covariance[9];
-    memset(covariance, 0, 9*sizeof(float));
+    float cov_1 = 0;
+    float cov_2 = 0;
+    float cov_3 = 0;
+    float cov_4 = 0;
+    float cov_5 = 0;
+    float cov_6 = 0;
+    float cov_7 = 0;
+    float cov_8 = 0;
+    float cov_9 = 0;
     float sum = 0;
     #ifdef DEBUG
     //printf("fsds %d, %f, %f\n", palette_index, prob_sp, prob_c[palette_index]);
     #endif
 
     // compute covariance matrix
+    #pragma omp parallel for reduction(+:sum, cov_1, cov_2, cov_3, cov_4, cov_5, cov_6, cov_7, cov_8, cov_9)
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_height; i++) {
             int idx = j*out_width + i;
@@ -935,18 +971,19 @@ void PixImage :: getMajorAxis(int palette_index, float *value, LabColor *vector)
             float b_error = fabs(pl_color.b - sp_color.b);
 
             // update covariance
-            covariance[0] += prob_oc*L_error*L_error;
-            covariance[1] += prob_oc*a_error*L_error;
-            covariance[2] += prob_oc*b_error*L_error;
-            covariance[3] += prob_oc*L_error*a_error;
-            covariance[4] += prob_oc*a_error*a_error;
-            covariance[5] += prob_oc*b_error*a_error;
-            covariance[6] += prob_oc*L_error*b_error;
-            covariance[7] += prob_oc*a_error*b_error;
-            covariance[8] += prob_oc*b_error*b_error;
+            cov_1 += prob_oc*L_error*L_error;
+            cov_2 += prob_oc*a_error*L_error;
+            cov_3 += prob_oc*b_error*L_error;
+            cov_4 += prob_oc*L_error*a_error;
+            cov_5 += prob_oc*a_error*a_error;
+            cov_6 += prob_oc*b_error*a_error;
+            cov_7 += prob_oc*L_error*b_error;
+            cov_8 += prob_oc*a_error*b_error;
+            cov_9 += prob_oc*b_error*b_error;
         }
     }
 
+    float covariance[9] = {cov_1, cov_2, cov_3, cov_4, cov_5, cov_6, cov_7, cov_8, cov_9};
     LabColor eVec;
     float eVal;
 

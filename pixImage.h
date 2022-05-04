@@ -69,6 +69,7 @@ class PixImage{
     // Superpixel calculation 
     FloatVec *superPixel_pos; //<- Super pixel coordinate positions "on input image"
     LabColor *sp_mean_lab;  //<- superpixel mean color value
+    int *superPixel; //<- Map of superpixels
     int *region_map;      //<- array with values for pixels associated with a specific superpixel 
 
     // Palette 
