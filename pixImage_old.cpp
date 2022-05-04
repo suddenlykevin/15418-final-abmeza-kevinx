@@ -760,6 +760,8 @@ void PixImage :: runPixelate(){
     printf("Overall: %.3f s\n", 1000.f * (endAllTime - startAllTime));
     
     printf("\t- Initialize: %.3f s\n", 1000.f * (endInitializeTime - startInitializeTime));
+
+    printf("SEQUENTIAL!\n");
     #endif
 
 }
