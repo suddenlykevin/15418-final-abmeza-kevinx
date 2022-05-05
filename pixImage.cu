@@ -913,7 +913,6 @@ __global__ void kernelSmoothPositions() {
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
     LabColor *buf_lab = cuGlobalConsts.buf_lab;
 
-
     // smooth positions
     for (int j = 0; j < out_height; j++) {
         for (int i = 0; i < out_width; i++) {                
@@ -1010,37 +1009,31 @@ __global__ void kernelSmoothPositions() {
 /**
  * @brief Associate Pixels to specific super pixels
  */
-__global__ void kernelAssociateToPalette() {
+__global__ void kernelAssociateToPalette(float *new_prob_c) {
     
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    //TODO: RUN ON ONE KERNAL FOR NOW
-    if (index == 0){
-    
+    int spX = blockIdx.x * blockDim.x + threadIdx.x;
+    int spY = blockIdx.y * blockDim.y + threadIdx.y;
+    int threadId = threadIdx.x + blockDim.x * threadIdx.y;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
+    int out_width = cuGlobalConsts.out_width;
+    int out_height = cuGlobalConsts.out_height;
     int K_colors = cuGlobalConsts.K_colors;
     float prob_sp = cuGlobalConsts.prob_sp;
-    
-
     int *palette_size = cuGlobalConsts.palette_size;
-    float *prob_c_if_sp = cuGlobalConsts.prob_c_if_sp;
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
     LabColor *palette_lab = cuGlobalConsts.palette_lab;
-    int *palette_assign = cuGlobalConsts.palette_assign;
-    float *prob_c = cuGlobalConsts.prob_c;
     float *T = cuGlobalConsts.T;
 
+    float *prob_c_if_sp = cuGlobalConsts.prob_c_if_sp;
+    int *palette_assign = cuGlobalConsts.palette_assign;
+    float *prob_c = cuGlobalConsts.prob_c;
 
-    // Allocate local memory
-    float *new_prob_c = new float[*palette_size];
-
-    memset(new_prob_c, 0, (*palette_size) * sizeof(float));
-    memset(prob_c_if_sp, 0, K_colors * 2 * N_pix *sizeof(float));
+    int spidx = spY * out_width + spX;
         
     // Update superpixel colors from color palette based on P(c_k|p_s) calculation
-    for(int p = 0; p < N_pix; p++) {
+    if (spX < out_width && spY < out_height) {
         // Get the best color value to update the superpixel color
         int best_c = -1;
         float best_norm_val = 0.0f;
@@ -1051,9 +1044,9 @@ __global__ void kernelAssociateToPalette() {
 
             // m_s' - c_k TODO: MIGHT NOT WORK?
             LabColor pixDiff;
-            pixDiff.L = sp_mean_lab[p].L - palette_lab[c].L;
-            pixDiff.a = sp_mean_lab[p].a - palette_lab[c].a;
-            pixDiff.b = sp_mean_lab[p].b - palette_lab[c].b;
+            pixDiff.L = sp_mean_lab[spidx].L - palette_lab[c].L;
+            pixDiff.a = sp_mean_lab[spidx].a - palette_lab[c].a;
+            pixDiff.b = sp_mean_lab[spidx].b - palette_lab[c].b;
 
             // || m_s' - c_k ||
             float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
@@ -1073,26 +1066,16 @@ __global__ void kernelAssociateToPalette() {
         } 
 
         // update palette assignment
-        palette_assign[p] = best_c;
+        palette_assign[spidx] = best_c;
 
         for(int c = 0; c < (*palette_size); c++) {
             double p_norm = probs[c]/sum_prob;
-            prob_c_if_sp[c*(N_pix) + p] = p_norm;
-            new_prob_c[c] += prob_sp*p_norm;
+            prob_c_if_sp[c*(N_pix) + spidx] = p_norm;
+            atomicAdd(&(new_prob_c[c]), prob_sp*p_norm);
         }
-
         delete[] probs;
     }
-    
-    // update color probabilities
-    memcpy(prob_c, new_prob_c, (*palette_size)*sizeof(float));
 
-    // Delete the stuff
-    delete[] new_prob_c;
-
-    }
-    
-    
 }
 
 /**
@@ -1556,6 +1539,8 @@ void PixImage :: runPixelate(){
     
     int iter = 0;
 
+    float *new_prob_c;
+    cudaMalloc(&new_prob_c, K_colors * 2 * sizeof(float));
 
     #ifdef TIMING
     endInitializeTime = CycleTimer::currentSeconds();
@@ -1642,9 +1627,12 @@ void PixImage :: runPixelate(){
         start4_3AssociateTime = CycleTimer::currentSeconds();
         #endif
 
-        dim3 blockDim2(1, 1, 1);
-        dim3 gridDim2(1,1);
-        kernelAssociateToPalette<<<1, 10>>>();
+        dim3 blockDim2(BLOCK_DIM, BLOCK_DIM, 1);
+        dim3 gridDim2((out_width + blockDim2.x - 1) / blockDim2.x,
+            (out_height + blockDim2.y - 1) / blockDim2.y);
+        cudaMemset(new_prob_c, 0, K_colors * 2 * sizeof(float));
+        kernelAssociateToPalette<<<gridDim2, blockDim2>>>(new_prob_c);
+        cudaMemcpy(cuDev_prob_c, new_prob_c, K_colors * 2 * sizeof(float), cudaMemcpyDeviceToDevice);
         cudaDeviceSynchronize();
 
    
@@ -1673,7 +1661,6 @@ void PixImage :: runPixelate(){
   
         iter ++;
     }
-
 
     free(converged);
 
