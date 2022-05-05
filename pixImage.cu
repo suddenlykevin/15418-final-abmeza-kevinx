@@ -839,6 +839,7 @@ __global__ void kernelAssociatetoSuperPixels() {
 
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
     int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
+    int threadId = threadIdx.x + blockDim.x * threadIdx.y;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
@@ -859,7 +860,7 @@ __global__ void kernelAssociatetoSuperPixels() {
         int min_y = (pixelY - S > 0.0f) ? pixelY - S : 0.0f;
         int max_x = (pixelX + S < (in_width - 1)) ? pixelX + S : in_width - 1;
         int max_y = (pixelY + S < (in_height - 1)) ? pixelY + S : in_height - 1;
-        int curr_idx = pixelY * in_width + pixelY;
+        int curr_idx = pixelY * in_width + pixelX;
         
         for (int idx = 0; idx < N_pix; idx++) {
             int x = (int) round(superPixel_pos[idx].x);
@@ -871,7 +872,7 @@ __global__ void kernelAssociatetoSuperPixels() {
                                         x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
                                         input_img_lab[curr_idx].b, pixelX, pixelY);
                 
-                if (distance < 0 || dist_new < distance) {
+                if (distance < 0.f || dist_new < distance) {
                     distance = dist_new;
                     min = idx;
                 }
@@ -1214,13 +1215,7 @@ __global__ void kernelRefinePalette() {
  */
 __global__ void kernelProcessOutputImage() {
     
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    //BLOCK_DIM = 32
-
-    // block-level coordinates
-    int blockX = blockIdx.x;
-    int blockY = blockIdx.y;
+    int index = threadIdx.y * blockDim.x + threadIdx.x;
     
     // image pixel coordinates
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
@@ -1241,16 +1236,16 @@ __global__ void kernelProcessOutputImage() {
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
     // *** TODO TRANSFER OVER CONSTANTS ***//
-    out_width = cuGlobalConsts.out_width;
-    out_height = cuGlobalConsts.out_height;
-    in_width = cuGlobalConsts.in_width;
-    in_height = cuGlobalConsts.in_height;
-    
-    average_palette = cuGlobalConsts.average_palette;
-    palette_assign = cuGlobalConsts.palette_assign;
-    output_img = cuGlobalConsts.output_img;
-    spoutput_img = cuGlobalConsts.spoutput_img;
-    region_map = cuGlobalConsts.region_map;
+        out_width = cuGlobalConsts.out_width;
+        out_height = cuGlobalConsts.out_height;
+        in_width = cuGlobalConsts.in_width;
+        in_height = cuGlobalConsts.in_height;
+        
+        average_palette = cuGlobalConsts.average_palette;
+        palette_assign = cuGlobalConsts.palette_assign;
+        output_img = cuGlobalConsts.output_img;
+        spoutput_img = cuGlobalConsts.spoutput_img;
+        region_map = cuGlobalConsts.region_map;
     }
     __syncthreads();
 
@@ -1261,7 +1256,6 @@ __global__ void kernelProcessOutputImage() {
 
         cuDevlab2rgb(color.L, color.a, color.b, 
                 &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
-    
     }
 
     // Create superpixel output image
@@ -1433,7 +1427,7 @@ void PixImage :: initVariables(){
 
     cudaMemcpy(cuDev_input_img, input_img, 3*M_pix*sizeof(unsigned char), cudaMemcpyHostToDevice);
     cudaMemset(cuDev_input_img_lab, 0, M_pix* sizeof(LabColor));
-    cudaMemset(cuDev_output_img, 0, N_pix * 3);
+    cudaMemset(cuDev_output_img, 0, N_pix * 3 * sizeof(unsigned char));
     cudaMemset(cuDev_spoutput_img, 0, M_pix*3*sizeof(unsigned char));
     cudaMemset(cuDev_buf_lab, 0, N_pix*sizeof(LabColor));
     cudaMemset(cuDev_superPixel_pos, 0, N_pix * sizeof(FloatVec));
@@ -1691,8 +1685,8 @@ void PixImage :: runPixelate(){
     cudaDeviceSynchronize();
 
     //Transfer new image stuff from device (TODO: maybe bug)
-    cudaMemcpy(output_img, cuDev_output_img, N_pix * 3, cudaMemcpyDeviceToHost);
-    cudaMemcpy(spoutput_img, cuDev_spoutput_img, M_pix*3, cudaMemcpyDeviceToHost);
+    cudaMemcpy(output_img, cuDev_output_img, N_pix * 3 * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+    cudaMemcpy(spoutput_img, cuDev_spoutput_img, M_pix * 3 * sizeof(unsigned char), cudaMemcpyDeviceToHost);
 
     #ifdef TIMING
     endOutputTime = CycleTimer::currentSeconds();
