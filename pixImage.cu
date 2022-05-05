@@ -20,7 +20,7 @@
 
 // Constants to regulate what we print
 //#define DEBUG     // misc. debug statements
-#define RUN_DEBUG // debug statements that check running progress
+//#define RUN_DEBUG // debug statements that check running progress
 #define TIMING // Calculate and print timing information
 
 
@@ -1247,49 +1247,67 @@ __global__ void kernelProcessOutputImage() {
     
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
+    //BLOCK_DIM = 32
+
+    // block-level coordinates
+    int blockX = blockIdx.x;
+    int blockY = blockIdx.y;
+    
+    // image pixel coordinates
+    int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
+    int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
+
+
+    __shared__ int out_width;
+    __shared__ int out_height ;
+    __shared__ int in_width ;
+    __shared__ int in_height ;
+    
+    __shared__ LabColor *average_palette;
+    __shared__ int *palette_assign ;
+    __shared__ unsigned char  *output_img ;
+    __shared__ unsigned char  *spoutput_img ;
+    __shared__ int *region_map;
+    
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
-
     // *** TODO TRANSFER OVER CONSTANTS ***//
-    int out_width = cuGlobalConsts.out_width;
-    int out_height = cuGlobalConsts.out_height;
-    int in_width = cuGlobalConsts.in_width;
-    int in_height = cuGlobalConsts.in_height;
-
+    out_width = cuGlobalConsts.out_width;
+    out_height = cuGlobalConsts.out_height;
+    in_width = cuGlobalConsts.in_width;
+    in_height = cuGlobalConsts.in_height;
     
-    LabColor *average_palette = cuGlobalConsts.average_palette;
-    int *palette_assign = cuGlobalConsts.palette_assign;
-    unsigned char  *output_img = cuGlobalConsts.output_img;
-    unsigned char  *spoutput_img = cuGlobalConsts.spoutput_img;
-    int *region_map = cuGlobalConsts.region_map;
+    average_palette = cuGlobalConsts.average_palette;
+    palette_assign = cuGlobalConsts.palette_assign;
+    output_img = cuGlobalConsts.output_img;
+    spoutput_img = cuGlobalConsts.spoutput_img;
+    region_map = cuGlobalConsts.region_map;
+    }
+    __syncthreads();
 
     // Create the output image
-    for (int j = 0; j < out_height; j++) {
-        for (int i = 0; i < out_width; i++) {
-            int idx = j*out_width + i;
-            LabColor color = average_palette[palette_assign[idx]];
+    if (pixelX < out_width && pixelY < out_height){
+        int idx = pixelY*out_width + pixelX;
+        LabColor color = average_palette[palette_assign[idx]];
 
-            cuDevlab2rgb(color.L, color.a, color.b, 
-                    &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
-        }
+        cuDevlab2rgb(color.L, color.a, color.b, 
+                &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
+    
     }
 
     // Create superpixel output image
-    for (int j = 0; j < in_height; j++) {
-        for (int i = 0; i < in_width; i++) {
-            int idx = j*in_width + i;
-            if ((region_map[idx]/out_width % 2 == 0 && region_map[idx] % 2 == 0) ||
-                (region_map[idx]/out_width % 2 == 1 && region_map[idx] % 2 == 1)) {
-                spoutput_img[idx*3] = 0;
-                spoutput_img[idx*3 + 1] = 0;
-                spoutput_img[idx*3 + 2] = 0;
-            } else {
-                spoutput_img[idx*3] = 255;
-                spoutput_img[idx*3 + 1] = 255;
-                spoutput_img[idx*3 + 2] = 255;
-            }
+     if (pixelX < in_width && pixelY < in_height){
+        int idx = pixelY*in_width + pixelX;
+        if ((region_map[idx]/out_width % 2 == 0 && region_map[idx] % 2 == 0) ||
+            (region_map[idx]/out_width % 2 == 1 && region_map[idx] % 2 == 1)) {
+            spoutput_img[idx*3] = 0;
+            spoutput_img[idx*3 + 1] = 0;
+            spoutput_img[idx*3 + 2] = 0;
+        } else {
+            spoutput_img[idx*3] = 255;
+            spoutput_img[idx*3 + 1] = 255;
+            spoutput_img[idx*3 + 2] = 255;
         }
-    }
     }
 }
 
@@ -1692,10 +1710,11 @@ void PixImage :: runPixelate(){
 
     getAveragedPalette();
 
-    dim3 blockDim4(1, 1, 1);
-    dim3 gridDim4(1,1);
-
-    kernelProcessOutputImage<<<1, 10>>>();
+    
+    dim3 blockDim4(BLOCK_DIM, BLOCK_DIM, 1);
+    dim3 gridDim4((in_width + blockDim4.x - 1) / blockDim4.x,
+            (in_height + blockDim4.y - 1) / blockDim4.y);
+    kernelProcessOutputImage<<<gridDim4, blockDim4>>>();
     cudaDeviceSynchronize();
 
     //Transfer new image stuff from device (TODO: maybe bug)
