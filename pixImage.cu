@@ -20,7 +20,7 @@
 
 // Constants to regulate what we print
 //#define DEBUG     // misc. debug statements
-#define RUN_DEBUG // debug statements that check running progress
+//#define RUN_DEBUG // debug statements that check running progress
 #define TIMING // Calculate and print timing information
 
 
@@ -68,7 +68,7 @@ struct GlobalConstants {
 
     // Palette 
     int K_colors;          //<- number of colors we aim to use in the pallette
-    int * palette_size;      //<- POINTER SO WE CAN MODIFY Current # of colors stored in palette_lab
+    int *palette_size;      //<- POINTER SO WE CAN MODIFY Current # of colors stored in palette_lab
     PalettePair *palette_pairs;
     int *palette_assign; //<- palette assignment for each superpixel
     LabColor *palette_lab; //<- palette array with color values in palette
@@ -97,29 +97,14 @@ __constant__ GlobalConstants cuGlobalConsts;
 //******************* INLINE KERNEL HELPER FUNCTIONS ******************//
 //*********************************************************************//
 
-/**
- * @brief max function
- * 
- * @param item1 
- * @param item2 
- * @return int 
- */
+
 __device__ __inline__ int cuDevMax(int item1, int item2) {
     return (item1 >= item2) ? item1 : item2;
 }
 
-/**
- * @brief min function
- * 
- * @param item1 
- * @param item2 
- * @return int
- */
 __device__ __inline__ int cuDevMin(int item1, int item2) {
     return (item1 >= item2) ? item2 : item2;
 }
-
-
 
 __device__ __inline__ int cuDevMaxEigen3(float *matrix, float *value, LabColor *vector) {
     
@@ -137,16 +122,16 @@ __device__ __inline__ int cuDevMaxEigen3(float *matrix, float *value, LabColor *
     
     float phi;
     if (x_2 > 0) {
-        phi = atan(sqrt(4*(x_1*x_1*x_1) - x_2*x_2)/x_2);
+        phi = atan(sqrtf(4*(x_1*x_1*x_1) - x_2*x_2)/x_2);
     } else if (x_2 == 0) {
         phi = M_PI/2;
     } else {
-        phi = atan(sqrt(4*(x_1*x_1*x_1) - x_2*x_2)/x_2) + M_PI;
+        phi = atan(sqrtf(4*(x_1*x_1*x_1) - x_2*x_2)/x_2) + M_PI;
     }
 
-    float lam_1 = (a + b + c - 2*sqrt(x_1)*cos(phi/3))/3;
-    float lam_2 = (a + b + c + 2*sqrt(x_1)*cos((phi - M_PI)/3))/3;
-    float lam_3 = (a + b + c + 2*sqrt(x_1)*cos((phi + M_PI)/3))/3;
+    float lam_1 = (a + b + c - 2*sqrtf(x_1)*cos(phi/3))/3;
+    float lam_2 = (a + b + c + 2*sqrtf(x_1)*cos((phi - M_PI)/3))/3;
+    float lam_3 = (a + b + c + 2*sqrtf(x_1)*cos((phi + M_PI)/3))/3;
 
     float lam = (lam_2 > lam_1) ? lam_2 : ((lam_3 > lam_1) ? lam_3 : lam_1);
 
@@ -174,15 +159,15 @@ __device__ __inline__ int cuDevMaxEigen3(float *matrix, float *value, LabColor *
 
 __device__ __inline__ float cuDevDist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
            float l_i, float a_i, float b_i, int x_i, int y_i) {
-    float d_lab = sqrt(pow(l_k - l_i, 2.f) + pow(a_k - a_i, 2.f) + pow(b_k - b_i, 2.f));
-    float d_xy = sqrt(pow((float) x_k - x_i, 2.f) + pow((float) y_k - y_i, 2.f));
+    float d_lab = sqrtf(powf(l_k - l_i, 2.f) + powf(a_k - a_i, 2.f) + powf(b_k - b_i, 2.f));
+    float d_xy = sqrtf(powf((float) x_k - x_i, 2.f) + powf((float) y_k - y_i, 2.f));
     float k = ((float) m) / S;
     return d_lab + k * d_xy;
 }
 
 
 __device__ __inline__ float cuDevGaussian(float x, float sigma, float mean) {
-    return exp((x-mean)*(x-mean)/(-2.0f*sigma*sigma))/sqrt(6.28319*sigma*sigma);
+    return exp((x-mean)*(x-mean)/(-2.0f*sigma*sigma))/sqrtf(6.28319*sigma*sigma);
 }
 
 
@@ -191,7 +176,7 @@ __device__ __inline__  float cuDevLinearize(int V) {
     float Vf = ((float) V) / 255.0f;
     if (Vf > rgbT_32f) {
         Vf = (Vf + rgbLShift_32f)*rgbLScale_32f;
-        return pow(Vf, rgbLPow_32f) * 100;
+        return powf(Vf, rgbLPow_32f) * 100;
     } else {
         return (Vf * rgbScale_32f) * 100;
     }
@@ -201,7 +186,7 @@ __device__ __inline__ unsigned char cuDevDelin(float V) {
     V = V / 100.f;
     float Vf;
     if (V > rgbTinv_32f) {
-        Vf = rgbInvScale_32f * pow(V, rgbLPowInv_32f) - rgbLShift_32f;
+        Vf = rgbInvScale_32f * powf(V, rgbLPowInv_32f) - rgbLShift_32f;
     } else {
         Vf = rgbSmallScale_32f * V; 
     }
@@ -278,7 +263,7 @@ __device__ __inline__ float cuDevXYZtorgB(float X, float Y, float Z) {
  */
 __device__ __inline__ float cuDevFInv_func(float t){
     if ( t > lab_delta_32f) {
-        return pow(t, labPow_32f);
+        return powf(t, labPow_32f);
     } else {
         return labSmallScaleInv_32f*(t - labSmallShift_32f);
     }
@@ -417,7 +402,7 @@ __device__ __inline__ void getMajorAxis(int palette_index, float *value, LabColo
         printf("maxEigen3 special case\n");
     }
 
-    float len = sqrt(eVec.L*eVec.L + eVec.a*eVec.a + eVec.b*eVec.b);
+    float len = sqrtf(eVec.L*eVec.L + eVec.a*eVec.a + eVec.b*eVec.b);
     if (len > 0) {
         eVec.L *= (1.0f/len);
         eVec.a *= (1.0f/len);
@@ -434,10 +419,19 @@ __device__ __inline__ void pushPaletteColor(LabColor color, float prob) {
     LabColor *palette_lab = cuGlobalConsts.palette_lab;
     float *prob_c = cuGlobalConsts.prob_c;
     int *palette_size = cuGlobalConsts.palette_size;
+    printf("---Runninf pushPaletteColor\n");
+    printf("---Runninf %x %x %x %d\n",palette_lab, prob_c, palette_size,*palette_size);
 
     palette_lab[*palette_size] = color;
+    printf("---dsa pushPaletteColor %f %f\n",prob);
+
     prob_c[*palette_size] = prob;
+    
+    printf("---sds pushPaletteColor\n");
     (*palette_size) = (*palette_size) + 1; 
+    printf("---Exiting pushPaletteColor\n");
+
+    
 }
 
 __device__ __inline__ void pushPalettePair(int a, int b) {
@@ -618,6 +612,7 @@ __global__ void kernelCreateInputLAB() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
+    printf("Running kernelCreateInputLAB\n");
     
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int M_pix = cuGlobalConsts.M_pix;
@@ -642,6 +637,7 @@ __global__ void kernelInitSuperPixels() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
+    printf("Running kernelInitSuperPixels\n");
     
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int in_width = cuGlobalConsts.in_width;
@@ -694,6 +690,7 @@ __global__ void kernelUpdateSuperPixelMeans() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
+    printf("Running kernelUpdateSuperPixelMeans\n");
     
     // *** TODO TRANSFER OVER CONSTANTS ***//
     const int N_pix = cuGlobalConsts.N_pix;
@@ -773,6 +770,7 @@ __global__ void kernelInitPaletteValues() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
+    printf("Running kernelInitPaletteValues\n");
     
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
@@ -801,9 +799,12 @@ __global__ void kernelInitPaletteValues() {
     #ifdef DEBUG
     printf("color_init: (%f, %f, %f)\n", color_sum.L, color_sum.a, color_sum.b);
     #endif
+    printf("Running kernelInitPaletteValues [[[2]]]\n");
 
     // Store color and update prob to any
     pushPaletteColor(color_sum, 0.5f);
+    
+    printf("Running kernelInitPaletteValues [[[3]]]\n");
     for (int idx = 0; idx < N_pix; idx ++) {
         prob_c_if_sp[idx] = 0.5f;
     }
@@ -822,7 +823,9 @@ __global__ void kernelInitPaletteValues() {
 
     pushPalettePair(0, 1);
 
-    *T = sqrt(2*variance) * kT0SafetyFactor;
+    *T = sqrtf(2*variance) * kT0SafetyFactor;
+
+    printf("T are %f \n", *T);
 
     }
 }
@@ -836,6 +839,7 @@ __global__ void kernelGetAveragedPalette() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
+    printf("Running kernelGetAveragedPalette\n");
     
     // *** TODO TRANSFER OVER CONSTANTS ***/
     LabColor *average_palette = cuGlobalConsts.average_palette;
@@ -883,6 +887,7 @@ __global__ void kernelAssociatetoSuperPixels() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
+    printf("Running kernelAssociatetoSuperPixels\n");
     
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
@@ -952,6 +957,7 @@ __global__ void kernelSmoothPositions() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
+    printf("Running kernelSmoothPositions\n");
     
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
@@ -1032,11 +1038,11 @@ __global__ void kernelSmoothPositions() {
             for(int jj = min_y; jj<=max_y; ++jj) {
             
             LabColor c_n = sp_mean_lab[jj*out_width + ii];
-            float d_color = (float) sqrt(pow(superpixel_color.L - c_n.L, 2.f) +
-                                            pow(superpixel_color.a - c_n.a, 2.f) +
-                                            pow(superpixel_color.b - c_n.b, 2.f));
+            float d_color = (float) sqrtf(powf(superpixel_color.L - c_n.L, 2.f) +
+                                            powf(superpixel_color.a - c_n.a, 2.f) +
+                                            powf(superpixel_color.b - c_n.b, 2.f));
             float w_color = cuDevGaussian(d_color, 2.0f ,0.0f);
-            float d_pos = (float) sqrt(pow((float) i-ii, 2.f) + pow((float) j-jj, 2.f));
+            float d_pos = (float) sqrtf(powf((float) i-ii, 2.f) + powf((float) j-jj, 2.f));
             float w_pos = cuDevGaussian(d_pos, 0.97f, 0.0f);
             float w_total = w_color*w_pos;
 
@@ -1067,6 +1073,7 @@ __global__ void kernelAssociateToPalette() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
+    printf("Running kernelAssociateToPalette\n");
     
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
@@ -1107,7 +1114,7 @@ __global__ void kernelAssociateToPalette() {
             pixDiff.b = sp_mean_lab[p].b - palette_lab[c].b;
 
             // || m_s' - c_k ||
-            float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
+            float norm_val = sqrtf(powf(pixDiff.L, 2.f) + powf(pixDiff.a, 2.f) + powf(pixDiff.b, 2.f));
 
             //  - (|| m_s' - c_k ||/T)
             float pow_val = -1.0f*(norm_val/(*T));
@@ -1156,6 +1163,7 @@ __global__ void kernelRefinePalette() {
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
     
+    printf("Running kernelRefinePalette\n");
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
@@ -1195,7 +1203,7 @@ __global__ void kernelRefinePalette() {
             palette_lab[c].b = c_sum.b/prob_c[c];
             LabColor curr = palette_lab[c];
 
-            palette_error += sqrt(pow(last.L-curr.L, 2.0f) + pow(last.a-curr.a, 2.0f) + pow(last.b-curr.b, 2.0f));
+            palette_error += sqrtf(powf(last.L-curr.L, 2.0f) + powf(last.a-curr.a, 2.0f) + powf(last.b-curr.b, 2.0f));
         }
     }
    
@@ -1224,9 +1232,9 @@ __global__ void kernelRefinePalette() {
                 LabColor color_a = palette_lab[palette_pairs[i].a];
                 LabColor color_b = palette_lab[palette_pairs[i].b];
 
-                float error = sqrt(pow(color_a.L-color_b.L, 2.0f) + 
-                                pow(color_a.a-color_b.a, 2.0f) + 
-                                pow(color_a.b-color_b.b, 2.0f));
+                float error = sqrtf(powf(color_a.L-color_b.L, 2.0f) + 
+                                powf(color_a.a-color_b.a, 2.0f) + 
+                                powf(color_a.b-color_b.b, 2.0f));
                 // printf("%f, (%f, %f, %f), (%f, %f, %f)\n", error, color_a.L,color_a.a,color_a.b, color_b.L, color_b.a, color_b.b);
                 // determine if split or simply perturb 
                 if (error > kSubclusterTolerance) {
@@ -1291,7 +1299,7 @@ __global__ void kernelProcessOutputImage() {
 
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
-    
+    printf("Running kernelProcessOutputImage\n");
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int out_width = cuGlobalConsts.out_width;
@@ -1314,7 +1322,6 @@ __global__ void kernelProcessOutputImage() {
 
             cuDevlab2rgb(color.L, color.a, color.b, 
                     &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
-
         }
     }
 
@@ -1334,12 +1341,7 @@ __global__ void kernelProcessOutputImage() {
             }
         }
     }
-
-
-
     }
-
-
 }
 
 //********************************************************//
@@ -1431,7 +1433,7 @@ void PixImage :: initSuperPixels(){
     dim3 gridDim(1,1);
 
 
-    kernelInitSuperPixels<<<gridDim, blockDim>>>();
+    kernelInitSuperPixels<<<1, 10>>>();
     cudaDeviceSynchronize();
 
 }
@@ -1443,7 +1445,7 @@ void PixImage :: updateSuperPixelMeans(){
     dim3 gridDim(1,1);
 
 
-    kernelUpdateSuperPixelMeans<<<gridDim, blockDim>>>();
+    kernelUpdateSuperPixelMeans<<<1, 10>>>();
     cudaDeviceSynchronize();
 }
 
@@ -1454,7 +1456,7 @@ void PixImage :: getAveragedPalette() {
     dim3 gridDim(1,1);
 
 
-    kernelGetAveragedPalette<<<gridDim, blockDim>>>();
+    kernelGetAveragedPalette<<<1, 10>>>();
     cudaDeviceSynchronize();
 
 }
@@ -1494,6 +1496,7 @@ void PixImage :: initVariables(){
     cudaMalloc(&cuDev_palette_assign, N_pix *sizeof(int));
     cudaMalloc(&cuDev_palette_lab, K_colors * 2 *sizeof(LabColor));
     cudaMalloc(&cuDev_average_palette, K_colors * 2 *sizeof(LabColor));
+    cudaMalloc(&cuDev_prob_c, K_colors * 2 * sizeof(float));
     cudaMalloc(&cuDev_prob_c_if_sp, K_colors * 2 * N_pix * sizeof(float));
         
     cudaMalloc(&cuDev_palette_size , sizeof(int));
@@ -1515,11 +1518,12 @@ void PixImage :: initVariables(){
     cudaMemset(cuDev_palette_assign,0, N_pix *sizeof(int));
     cudaMemset(cuDev_palette_lab, 0, K_colors * 2 *sizeof(LabColor));
     cudaMemset(cuDev_average_palette, 0, K_colors * 2 *sizeof(LabColor));
+    cudaMemset(cuDev_prob_c, 0, K_colors * 2 * sizeof(float));
     cudaMemset(cuDev_prob_c_if_sp,0, K_colors * 2 * N_pix * sizeof(float));
         
     cudaMemset(cuDev_palette_size , 0, sizeof(int));
-    cudaMemset(cuDev_palette_complete,false, sizeof(bool));
-    cudaMemset(cuDev_T , 0.0f, sizeof(float));
+    cudaMemset(cuDev_palette_complete, false, sizeof(bool));
+    cudaMemset(cuDev_T , T, sizeof(float));
     cudaMemset(cuDev_converged, false, sizeof(bool));
     
     // Initialize parameters in constant memory in order to take 
@@ -1540,6 +1544,8 @@ void PixImage :: initVariables(){
     params.palette_size = &palette_size;
 
     params.prob_sp = prob_sp;
+
+    params.S = S;     
 
     // Pointer Values
     params.input_img = cuDev_input_img;
@@ -1562,9 +1568,9 @@ void PixImage :: initVariables(){
     params.prob_c = cuDev_prob_c;
     params.prob_c_if_sp = cuDev_prob_c_if_sp;
 
+    params.palette_size = cuDev_palette_size; 
     params.T = cuDev_T; 
     params.converged = cuDev_converged;
-    params.S = S;     
     
     cudaMemcpyToSymbol(cuGlobalConsts, &params, sizeof(GlobalConstants)); 
 
@@ -1576,7 +1582,7 @@ void PixImage :: initialize(){
     dim3 blockDim0(1, 1, 1);
     dim3 gridDim0(1,1);
 
-    kernelCreateInputLAB<<<gridDim0, blockDim0>>>();
+    kernelCreateInputLAB<<<1, 10>>>();
     cudaDeviceSynchronize();
 
     ///*** Initialize Superpixel Values ***///
@@ -1588,7 +1594,7 @@ void PixImage :: initialize(){
     dim3 blockDim1(in_width, in_height, 1);
     dim3 gridDim1(1,1);
 
-    kernelInitPaletteValues<<<gridDim1, blockDim1>>>();
+    kernelInitPaletteValues<<<1, 10>>>();
     cudaDeviceSynchronize();
 
 }
@@ -1620,11 +1626,17 @@ void PixImage :: runPixelate(){
     
     int iter = 0;
 
+    printf("stuff before the loop %d %d %d\n ",*converged,iter,maxIter);
+
     // update superpixel segments
     while (!(*converged) && iter < maxIter) {
+        //printf("stuff before the loop %d %d %d\n ",*converged,iter,maxIter);
         
         #ifdef RUN_DEBUG
+        
+        cudaMemcpy(&T, cuDev_T , sizeof(float) , cudaMemcpyDeviceToHost);
         printf("iter %d, %f\n", iter, T);
+        
         #endif
 
         //*** ************************ ***//
@@ -1653,7 +1665,7 @@ void PixImage :: runPixelate(){
         dim3 blockDim0(1, 1, 1);
         dim3 gridDim0(1,1);
 
-        kernelAssociatetoSuperPixels<<<gridDim0, blockDim0>>>();
+        kernelAssociatetoSuperPixels<<<1, 10>>>();
         cudaDeviceSynchronize();
 
         
@@ -1672,11 +1684,10 @@ void PixImage :: runPixelate(){
         #endif
         
         ///*** Smooth positions of Superpixel and pixel ***///
-
         dim3 blockDim1(1, 1, 1);
         dim3 gridDim1(1,1);
 
-        kernelSmoothPositions<<<gridDim1, blockDim1>>>();
+        kernelSmoothPositions<<<1, 10>>>();
         cudaDeviceSynchronize();
 
         #ifdef RUN_DEBUG
@@ -1694,7 +1705,7 @@ void PixImage :: runPixelate(){
         dim3 blockDim2(1, 1, 1);
         dim3 gridDim2(1,1);
 
-        kernelAssociateToPalette<<<gridDim2, blockDim2>>>();
+        kernelAssociateToPalette<<<1, 10>>>();
         cudaDeviceSynchronize();
 
 
@@ -1714,7 +1725,7 @@ void PixImage :: runPixelate(){
         dim3 blockDim3(1, 1, 1);
         dim3 gridDim3(1,1);
 
-        kernelRefinePalette<<<gridDim3, blockDim3>>>();
+        kernelRefinePalette<<<1, 10>>>();
         cudaDeviceSynchronize();
 
         #ifdef RUN_DEBUG
@@ -1723,7 +1734,6 @@ void PixImage :: runPixelate(){
 
         //Transfer converged from device (TODO: maybe bug)
         cudaMemcpy(converged, cuDev_converged, sizeof(bool), cudaMemcpyDeviceToHost);
-    
   
         iter ++;
     }
@@ -1737,11 +1747,10 @@ void PixImage :: runPixelate(){
     // Create output image in rgb color values
     getAveragedPalette();
 
-
     dim3 blockDim4(1, 1, 1);
     dim3 gridDim4(1,1);
 
-    kernelProcessOutputImage<<<gridDim4, blockDim4>>>();
+    kernelProcessOutputImage<<<1, 10>>>();
     cudaDeviceSynchronize();
 
     //Transfer new image stuff from device (TODO: maybe bug)

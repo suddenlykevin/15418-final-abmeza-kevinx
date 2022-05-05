@@ -93,18 +93,18 @@ class PixImage{
     LabColor *cuDev_sp_mean_lab;  
     int *cuDev_region_map;     
  
-    int *cuDev_palette_size;      //<- POINTER SO WE CAN MODIFY
+    int *cuDev_palette_size;          //<- POINTER SO WE CAN MODIFY
     PalettePair *cuDev_palette_pairs;
     int *cuDev_palette_assign;
     LabColor *cuDev_palette_lab; 
-    LabColor *cuDev_average_palette; //<- average palette array with average color values
-    bool *cuDev_palette_complete; //<- POINTER SO WE CAN MODIFY
+    LabColor *cuDev_average_palette;  //<- average palette array with average color values
+    bool *cuDev_palette_complete;     //<- POINTER SO WE CAN MODIFY
 
     float *cuDev_prob_c;         
     float *cuDev_prob_c_if_sp;   
 
     // Temperature
-    float *cuDev_T;   //<- POINTER SO WE CAN MODIFY
+    float *cuDev_T;        //<- POINTER SO WE CAN MODIFY
 
     // extra stuff
     bool *cuDev_converged; //<- POINTER SO WE CAN MODIFY
