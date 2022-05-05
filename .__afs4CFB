@@ -20,7 +20,7 @@
 
 // Constants to regulate what we print
 //#define DEBUG     // misc. debug statements
-//#define RUN_DEBUG // debug statements that check running progress
+#define RUN_DEBUG // debug statements that check running progress
 #define TIMING // Calculate and print timing information
 
 
@@ -782,12 +782,13 @@ __global__ void kernelGetAveragedPalette() {
 
     if (*palette_complete) {
         if (index == 0){
+            printf("index print \n");
             memcpy(average_palette, palette_lab, (*palette_size) *sizeof(LabColor));
         }
         return;
     }
 
-    if (index < *palette_size >> 1){
+    if (index < (*palette_size) << 1){
         
         PalettePair pair = palette_pairs[index];
         float weight_a = prob_c[pair.a];
