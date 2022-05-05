@@ -39,6 +39,7 @@
 #include <algorithm> 
 #include <stack>
 #include <cmath>
+#include <cfloat>
 using namespace std;
 
 
@@ -971,8 +972,8 @@ __global__ void kernelSmoothPositions(FloatVec *new_superPixel_pos) {
  */
 __global__ void kernelAssociateToPalette(float *new_prob_c) {
     
-    int spX = blockIdx.x * blockDim.x + threadIdx.x;
-    int spY = blockIdx.y * blockDim.y + threadIdx.y;
+    int spX = blockIdx.x;
+    int spY = blockIdx.y;
     int threadId = threadIdx.x + blockDim.x * threadIdx.y;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
@@ -991,51 +992,87 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
     float *prob_c = cuGlobalConsts.prob_c;
 
     int spidx = spY * out_width + spX;
+
+    __shared__ volatile float vals[BLOCK_DIM * BLOCK_DIM];
+    __shared__ volatile int idxs[BLOCK_DIM * BLOCK_DIM];
+    __shared__ double *probs;
+    __shared__ volatile int last_block;
+    __shared__ double sum_prob;
+    __shared__ LabColor sp_color;
+
+    if (threadId == 0) {
+        probs = new double[(*palette_size)];
+        sum_prob = 0.f;
+        sp_color = sp_mean_lab[spidx];
+    }
+    __syncthreads();
         
     // Update superpixel colors from color palette based on P(c_k|p_s) calculation
-    if (spX < out_width && spY < out_height) {
-        // Get the best color value to update the superpixel color
-        int best_c = -1;
-        float best_norm_val = 0.0f;
-        double sum_prob = 0.0f;
-        double *probs = new double[*palette_size];
 
-        for (int c = 0; c < (*palette_size); c++){
+    // Get the best color value to update the superpixel color
+    int best_c = -1;
+    float best_norm_val = FLT_MAX;
 
-            // m_s' - c_k TODO: MIGHT NOT WORK?
-            LabColor pixDiff;
-            pixDiff.L = sp_mean_lab[spidx].L - palette_lab[c].L;
-            pixDiff.a = sp_mean_lab[spidx].a - palette_lab[c].a;
-            pixDiff.b = sp_mean_lab[spidx].b - palette_lab[c].b;
+    int idx = threadId;
 
-            // || m_s' - c_k ||
-            float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
+    // find local minimums
+    while (idx < (*palette_size)) {
+        // m_s' - c_k TODO: MIGHT NOT WORK?
+        LabColor pixDiff;
+        pixDiff.L = sp_color.L - palette_lab[idx].L;
+        pixDiff.a = sp_color.a - palette_lab[idx].a;
+        pixDiff.b = sp_color.b - palette_lab[idx].b;
 
-            //  - (|| m_s' - c_k ||/T)
-            float pow_val = -1.0f*(norm_val/(*T));
-            float prob = prob_c[c] * exp(pow_val);
-            
-            probs[c] = prob;
-            sum_prob += prob;
+        // || m_s' - c_k ||
+        float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
 
-            //Update if better value
-            if (best_c < 0 || norm_val < best_norm_val){
-                best_c = c;
-                best_norm_val = norm_val;
-            }
-        } 
+        //  - (|| m_s' - c_k ||/T)
+        float pow_val = -1.0f*(norm_val/(*T));
+        float prob = prob_c[idx] * exp(pow_val);
+        
+        probs[idx] = prob;
+        atomicAdd(&sum_prob, prob);
 
-        // update palette assignment
-        palette_assign[spidx] = best_c;
-
-        for(int c = 0; c < (*palette_size); c++) {
-            double p_norm = probs[c]/sum_prob;
-            prob_c_if_sp[c*(N_pix) + spidx] = p_norm;
-            atomicAdd(&(new_prob_c[c]), prob_sp*p_norm);
+        if (best_c < 0 || norm_val < best_norm_val) {
+            best_c = idx;
+            best_norm_val = norm_val;
         }
-        delete[] probs;
+
+        idx += BLOCK_DIM * BLOCK_DIM;
     }
 
+    // populate shared array
+    vals[threadId] = best_norm_val;
+    idxs[threadId] = best_c;
+    __syncthreads();
+
+    // sweep to reduce
+    for (unsigned int i = (BLOCK_DIM * BLOCK_DIM >> 1); i > 0; i >>= 1) {
+        if (threadId < i) {
+            if (vals[threadId] > vals[threadId + i]) {
+                vals[threadId] = vals[threadId + i];
+                idxs[threadId] = idxs[threadId + i];
+            }
+        }
+        __syncthreads();
+    }
+
+    if (threadId == 0) {
+        palette_assign[spidx] = idxs[0];
+    }
+
+    idx = threadId;
+
+    while (idx < (*palette_size)) {
+        double p_norm = probs[idx]/sum_prob;
+        prob_c_if_sp[idx*(N_pix) + spidx] = p_norm;
+        atomicAdd(&(new_prob_c[idx]), prob_sp*p_norm);
+        idx += BLOCK_DIM * BLOCK_DIM;
+    }
+
+    if (threadId == 0) {
+        delete[] probs;
+    }
 }
 
 /**
@@ -1522,6 +1559,9 @@ void PixImage :: runPixelate(){
     cudaMalloc(&color_sums, N_pix * sizeof(LabColor));
     cudaMalloc(&sp_count, N_pix * sizeof(int));
 
+    float *palette_error;
+    cudaMalloc(&palette_error, sizeof(float));
+
     #ifdef TIMING
     endInitializeTime = CycleTimer::currentSeconds();
     #endif
@@ -1615,8 +1655,7 @@ void PixImage :: runPixelate(){
         #endif
 
         dim3 blockDim2(BLOCK_DIM, BLOCK_DIM, 1);
-        dim3 gridDim2((out_width + blockDim2.x - 1) / blockDim2.x,
-            (out_height + blockDim2.y - 1) / blockDim2.y);
+        dim3 gridDim2(out_width, out_height);
         cudaMemset(new_prob_c, 0, K_colors * 2 * sizeof(float));
         kernelAssociateToPalette<<<gridDim2, blockDim2>>>(new_prob_c);
         cudaMemcpy(cuDev_prob_c, new_prob_c, K_colors * 2 * sizeof(float), cudaMemcpyDeviceToDevice);
@@ -1635,9 +1674,10 @@ void PixImage :: runPixelate(){
         start4_3RefineExpandTime = CycleTimer::currentSeconds();
         #endif
 
-        dim3 blockDim3(1, 1, 1);
-        dim3 gridDim3(1,1);
-        kernelRefinePalette<<<1, 10>>>();
+        cudaMemset(palette_error, 0, sizeof(float));
+        const int threadsPerBlock = 512;
+        const int blocks = (K_colors + threadsPerBlock - 1) / threadsPerBlock;
+        kernelRefinePalette<<<blocks, threadsPerBlock>>>();
         cudaDeviceSynchronize();
         cudaMemcpy(converged, cuDev_converged, sizeof(bool), cudaMemcpyDeviceToHost);
         
