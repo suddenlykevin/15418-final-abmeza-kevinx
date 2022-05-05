@@ -1376,8 +1376,8 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
     // Init Them Arrays
     input_img_lab = NULL;
 
-    output_img = NULL; 
-    spoutput_img = NULL; 
+    output_img = (unsigned char *)wrp_calloc(N_pix * 3, sizeof(unsigned char)); 
+    spoutput_img = (unsigned char *)wrp_calloc(M_pix * 3, sizeof(unsigned char)); 
     buf_lab = NULL;  
 
     superPixel_pos = NULL; 
