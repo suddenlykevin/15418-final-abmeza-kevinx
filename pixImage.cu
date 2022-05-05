@@ -1135,10 +1135,6 @@ __global__ void kernelRefinePalette() {
         }
     }
    
-    #ifdef RUN_DEBUG
-    printf("expand... ");
-    #endif
-
     if (palette_error < kPaletteErrorTolerance) {
         // check for convergence, lower temperature
         if ((*T) <= kTF) {
@@ -1220,49 +1216,67 @@ __global__ void kernelProcessOutputImage() {
     
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
+    //BLOCK_DIM = 32
+
+    // block-level coordinates
+    int blockX = blockIdx.x;
+    int blockY = blockIdx.y;
+    
+    // image pixel coordinates
+    int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
+    int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
+
+
+    __shared__ int out_width;
+    __shared__ int out_height ;
+    __shared__ int in_width ;
+    __shared__ int in_height ;
+    
+    __shared__ LabColor *average_palette;
+    __shared__ int *palette_assign ;
+    __shared__ unsigned char  *output_img ;
+    __shared__ unsigned char  *spoutput_img ;
+    __shared__ int *region_map;
+    
     //TODO: RUN ON ONE KERNAL FOR NOW
     if (index == 0){
-
     // *** TODO TRANSFER OVER CONSTANTS ***//
-    int out_width = cuGlobalConsts.out_width;
-    int out_height = cuGlobalConsts.out_height;
-    int in_width = cuGlobalConsts.in_width;
-    int in_height = cuGlobalConsts.in_height;
-
+    out_width = cuGlobalConsts.out_width;
+    out_height = cuGlobalConsts.out_height;
+    in_width = cuGlobalConsts.in_width;
+    in_height = cuGlobalConsts.in_height;
     
-    LabColor *average_palette = cuGlobalConsts.average_palette;
-    int *palette_assign = cuGlobalConsts.palette_assign;
-    unsigned char  *output_img = cuGlobalConsts.output_img;
-    unsigned char  *spoutput_img = cuGlobalConsts.spoutput_img;
-    int *region_map = cuGlobalConsts.region_map;
+    average_palette = cuGlobalConsts.average_palette;
+    palette_assign = cuGlobalConsts.palette_assign;
+    output_img = cuGlobalConsts.output_img;
+    spoutput_img = cuGlobalConsts.spoutput_img;
+    region_map = cuGlobalConsts.region_map;
+    }
+    __syncthreads();
 
     // Create the output image
-    for (int j = 0; j < out_height; j++) {
-        for (int i = 0; i < out_width; i++) {
-            int idx = j*out_width + i;
-            LabColor color = average_palette[palette_assign[idx]];
+    if (pixelX < out_width && pixelY < out_height){
+        int idx = pixelY*out_width + pixelX;
+        LabColor color = average_palette[palette_assign[idx]];
 
-            cuDevlab2rgb(color.L, color.a, color.b, 
-                    &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
-        }
+        cuDevlab2rgb(color.L, color.a, color.b, 
+                &(output_img[3*idx]), &(output_img[3*idx + 1]), &(output_img[3*idx + 2]));
+    
     }
 
     // Create superpixel output image
-    for (int j = 0; j < in_height; j++) {
-        for (int i = 0; i < in_width; i++) {
-            int idx = j*in_width + i;
-            if ((region_map[idx]/out_width % 2 == 0 && region_map[idx] % 2 == 0) ||
-                (region_map[idx]/out_width % 2 == 1 && region_map[idx] % 2 == 1)) {
-                spoutput_img[idx*3] = 0;
-                spoutput_img[idx*3 + 1] = 0;
-                spoutput_img[idx*3 + 2] = 0;
-            } else {
-                spoutput_img[idx*3] = 255;
-                spoutput_img[idx*3 + 1] = 255;
-                spoutput_img[idx*3 + 2] = 255;
-            }
+     if (pixelX < in_width && pixelY < in_height){
+        int idx = pixelY*in_width + pixelX;
+        if ((region_map[idx]/out_width % 2 == 0 && region_map[idx] % 2 == 0) ||
+            (region_map[idx]/out_width % 2 == 1 && region_map[idx] % 2 == 1)) {
+            spoutput_img[idx*3] = 0;
+            spoutput_img[idx*3 + 1] = 0;
+            spoutput_img[idx*3 + 2] = 0;
+        } else {
+            spoutput_img[idx*3] = 255;
+            spoutput_img[idx*3 + 1] = 255;
+            spoutput_img[idx*3 + 2] = 255;
         }
-    }
     }
 }
 
@@ -1292,13 +1306,14 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
         //Timing variables
         startAllTime=0.f; endAllTime=0.f; 
         startInitializeTime=0.f; endInitializeTime=0.f;
-        start4_2Time=0.f; end4_2Time=0.f; total4_2Time=0.f;
-        start4_2AverageTime=0.f; end4_2AverageTime=0.f; total4_2AverageTime=0.f;
-        start4_2AssociateTime=0.f; end4_2AssociateTime=0.f; total4_2AssociateTime=0.f;
-        start4_2UpdateTime=0.f; end4_2UpdateTime=0.f; total4_2UpdateTime=0.f;
-        start4_2SmoothTime=0.f; end4_2SmoothTime=0.f; total4_2SmoothTime=0.f;
-        start4_3AssociateTime=0.f; end4_3AssociateTime=0.f; total4_3AssociateTime=0.f;
-        start4_3RefineExpandTime=0.f; end4_3RefineExpandTime=0.f; total4_3RefineExpandTime=0.f;
+        start4_2Time=0.f; total4_2Time=0.f;
+        start4_2AverageTime=0.f;  total4_2AverageTime=0.f;
+        start4_2AssociateTime=0.f;  total4_2AssociateTime=0.f;
+        start4_2UpdateTime=0.f;  total4_2UpdateTime=0.f;
+        start4_2SmoothTime=0.f;  total4_2SmoothTime=0.f;
+        start4_3Time=0.f;  total4_3Time=0.f;
+        start4_3AssociateTime=0.f;total4_3AssociateTime=0.f;
+        start4_3RefineExpandTime=0.f;  total4_3RefineExpandTime=0.f;
         startOutputTime=0.f; endOutputTime=0.f;
     #endif
 
@@ -1549,105 +1564,111 @@ void PixImage :: runPixelate(){
         printf("iter %d, %f\n", iter, T);
         #endif
 
-        //*** ************************ ***//
+        //*** ************************ ***// 
         //*** (4.2) REFINE SUPERPIXELS ***//
         //*** ************************ ***//
 
         ///*** Update boundaries of pixels Associated with super pixels ***///
         
-        #ifdef RUN_DEBUG
-        printf("average...");
+    
+        #ifdef TIMING
+        start4_2Time = CycleTimer::currentSeconds();
+        start4_2AverageTime = CycleTimer::currentSeconds();
         #endif
 
         ///*** Get average colors for palette ***///
         getAveragedPalette();
         
-        #ifdef RUN_DEBUG
-        printf("DONE\n");
+        #ifdef TIMING
+        total4_2AverageTime += (CycleTimer::currentSeconds() - start4_2AverageTime);
         #endif
-
-        #ifdef RUN_DEBUG
-        printf("associate...\n");
-        #endif
-
+     
         ///*** Associate to superpixels ***///
 
+        #ifdef TIMING
+        start4_2AssociateTime = CycleTimer::currentSeconds();
+        #endif
+        
         dim3 blockDim0(BLOCK_DIM, BLOCK_DIM, 1);
         dim3 gridDim0((in_width + blockDim0.x - 1) / blockDim0.x,
             (in_height + blockDim0.y - 1) / blockDim0.y);
 
         kernelAssociatetoSuperPixels<<<gridDim0, blockDim0>>>();
         cudaDeviceSynchronize();
-
-        
-        #ifdef RUN_DEBUG 
-        printf("udpate means...");
+       
+        #ifdef TIMING
+        total4_2AssociateTime += (CycleTimer::currentSeconds() - start4_2AssociateTime);
         #endif
         
+
+        //** Update the means **//
+        #ifdef TIMING
+        start4_2UpdateTime = CycleTimer::currentSeconds();
+        #endif
+
         updateSuperPixelMeans();
 
-        #ifdef RUN_DEBUG
-        printf("DONE\n");
-        #endif
-
-        #ifdef RUN_DEBUG
-        printf("smooth...");
+        #ifdef TIMING
+        total4_2UpdateTime += (CycleTimer::currentSeconds() - start4_2UpdateTime);
         #endif
         
         ///*** Smooth positions of Superpixel and pixel ***///
+        #ifdef TIMING
+        start4_2SmoothTime = CycleTimer::currentSeconds();
+        #endif
+
         dim3 blockDim1(1, 1, 1);
         dim3 gridDim1(1,1);
-
         kernelSmoothPositions<<<1, 10>>>();
         cudaDeviceSynchronize();
 
-        #ifdef RUN_DEBUG
-        printf("DONE\n");
+        #ifdef TIMING
+        total4_2SmoothTime += (CycleTimer::currentSeconds() - start4_2SmoothTime);
+        total4_2Time += (CycleTimer::currentSeconds() - start4_2Time);
         #endif
-
+     
 
         //*** ************************************** ***//
         //*** (4.3) ASSOCIATE SUPERPIXELS TO PALETTE ***//
         //*** ************************************** ***//
-        #ifdef RUN_DEBUG
-        printf("associate...");
+
+        #ifdef TIMING
+        start4_3Time = CycleTimer::currentSeconds();
+        start4_3AssociateTime = CycleTimer::currentSeconds();
         #endif
 
         dim3 blockDim2(1, 1, 1);
         dim3 gridDim2(1,1);
-
         kernelAssociateToPalette<<<1, 10>>>();
         cudaDeviceSynchronize();
 
-
-        #ifdef RUN_DEBUG
-        printf("DONE\n");
+   
+        #ifdef TIMING
+        total4_3AssociateTime += (CycleTimer::currentSeconds() - start4_3AssociateTime);
         #endif
 
         // //*** ***************************** ***//
         // //*** (4.3) REFINE + EXPAND PALETTE ***//
         // //*** ***************************** ***//
-
         
-        #ifdef RUN_DEBUG
-        printf("refine...");
+        #ifdef TIMING
+        start4_3RefineExpandTime = CycleTimer::currentSeconds();
         #endif
-        
+
         dim3 blockDim3(1, 1, 1);
         dim3 gridDim3(1,1);
-
         kernelRefinePalette<<<1, 10>>>();
         cudaDeviceSynchronize();
-
-        #ifdef RUN_DEBUG
-        printf("DONE\n");
-        #endif
-
-        //Transfer converged from device (TODO: maybe bug)
         cudaMemcpy(converged, cuDev_converged, sizeof(bool), cudaMemcpyDeviceToHost);
+        
+        #ifdef TIMING
+        total4_3RefineExpandTime += (CycleTimer::currentSeconds() - start4_3RefineExpandTime);
+        total4_3Time += (CycleTimer::currentSeconds() - start4_3Time);
+        #endif
   
         iter ++;
     }
+
 
     free(converged);
 
@@ -1656,20 +1677,25 @@ void PixImage :: runPixelate(){
     //*** ******************** ***//
     // palette_complete = false;
     // Create output image in rgb color values
+    #ifdef TIMING
+    startOutputTime = CycleTimer::currentSeconds();
+    #endif
+
     getAveragedPalette();
 
-    dim3 blockDim4(1, 1, 1);
-    dim3 gridDim4(1,1);
-
-    kernelProcessOutputImage<<<1, 10>>>();
+    
+    dim3 blockDim4(BLOCK_DIM, BLOCK_DIM, 1);
+    dim3 gridDim4((in_width + blockDim4.x - 1) / blockDim4.x,
+            (in_height + blockDim4.y - 1) / blockDim4.y);
+    kernelProcessOutputImage<<<gridDim4, blockDim4>>>();
     cudaDeviceSynchronize();
 
     //Transfer new image stuff from device (TODO: maybe bug)
     cudaMemcpy(output_img, cuDev_output_img, N_pix * 3, cudaMemcpyDeviceToHost);
     cudaMemcpy(spoutput_img, cuDev_spoutput_img, M_pix*3, cudaMemcpyDeviceToHost);
-    
 
     #ifdef TIMING
+    endOutputTime = CycleTimer::currentSeconds();
     endAllTime = CycleTimer::currentSeconds();
     #endif
 
@@ -1679,8 +1705,30 @@ void PixImage :: runPixelate(){
     //*** PRINT TIMING RESULTS ***//
     //*** ******************** ***//
     // Print Total Time to run algorithm (not include get image file and create image file)
-    printf("Overall: %.3f s\n", 1000.f * (endAllTime - startAllTime));
-    printf("\t- Initialize: %.3f s\n", 1000.f * (endInitializeTime - startInitializeTime));
+    printf("Total Timing:\n");
+    printf("Overall...............%.3f ms\n", 1000.f * (endAllTime - startAllTime));
+    printf("\t(4.1) Initialize...............%.3f ms\n", 1000.f * (endInitializeTime - startInitializeTime));
+    printf("\t(4.2) Refine Super Pixels......%.3f ms\n", 1000.f * total4_2Time);
+    printf("\t\tAverage SP................%.3f ms\n", 1000.f * total4_2AverageTime);
+    printf("\t\tAssociate SP..............%.3f ms\n", 1000.f * total4_2AssociateTime);
+    printf("\t\tUpdate Means SP...........%.3f ms\n", 1000.f * total4_2UpdateTime);
+    printf("\t\tSmooth SP.................%.3f ms\n", 1000.f * total4_2SmoothTime);
+    printf("\t(4.3) Refine Palette...........%.3f ms\n", 1000.f * total4_3Time);
+    printf("\t\tAssociate Palette.........%.3f ms\n", 1000.f * total4_3AssociateTime);
+    printf("\t\tRefine+Expand Palette.....%.3f ms\n", 1000.f * total4_3RefineExpandTime);
+    printf("\t(4.4) Post Process.............%.3f ms\n", 1000.f * (endOutputTime - startOutputTime));
+    printf("\n");
+
+    printf("Total Execution Averages per %d iterations:\n",iter);
+    printf("\t(4.2) Refine Super Pixels......%.3f ms\n", (1000.f * total4_2Time)/iter);
+    printf("\t\tAverage SP................%.3f ms\n", (1000.f * total4_2AverageTime)/iter);
+    printf("\t\tAssociate SP..............%.3f ms\n", (1000.f * total4_2AssociateTime)/iter);
+    printf("\t\tUpdate Means SP...........%.3f ms\n", (1000.f * total4_2UpdateTime)/iter);
+    printf("\t\tSmooth SP.................%.3f ms\n", (1000.f * total4_2SmoothTime)/iter);
+    printf("\t(4.3) Refine Palette...........%.3f ms\n", (1000.f * total4_3Time)/iter);
+    printf("\t\tAssociate Palette.........%.3f ms\n", (1000.f * total4_3AssociateTime)/iter);
+    printf("\t\tRefine+Expand Palette.....%.3f ms\n", (1000.f * total4_3RefineExpandTime)/iter);
+    
     #endif
 
 }

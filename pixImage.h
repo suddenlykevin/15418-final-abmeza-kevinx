@@ -26,6 +26,9 @@
 
 #define BLOCK_DIM 32
 
+
+#define BLOCK_DIM 32
+
 /**
  * @brief position vector data structure
  */
@@ -45,14 +48,15 @@ class PixImage{
     double startAllTime, endAllTime;
     double startInitializeTime, endInitializeTime;
 
-    double start4_2Time, end4_2Time, total4_2Time;
-    double start4_2AverageTime, end4_2AverageTime, total4_2AverageTime;
-    double start4_2AssociateTime, end4_2AssociateTime, total4_2AssociateTime;
-    double start4_2UpdateTime, end4_2UpdateTime, total4_2UpdateTime;
-    double start4_2SmoothTime, end4_2SmoothTime, total4_2SmoothTime;
+    double start4_2Time,  total4_2Time;
+    double start4_2AverageTime,  total4_2AverageTime;
+    double start4_2AssociateTime, total4_2AssociateTime;
+    double start4_2UpdateTime,  total4_2UpdateTime;
+    double start4_2SmoothTime,total4_2SmoothTime;
     
-    double start4_3AssociateTime, end4_3AssociateTime, total4_3AssociateTime;
-    double start4_3RefineExpandTime, end4_3RefineExpandTime, total4_3RefineExpandTime;
+    double start4_3Time, total4_3Time;
+    double start4_3AssociateTime, total4_3AssociateTime;
+    double start4_3RefineExpandTime, total4_3RefineExpandTime;
 
     double startOutputTime, endOutputTime;
 
