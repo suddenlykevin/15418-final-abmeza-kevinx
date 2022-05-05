@@ -24,7 +24,6 @@
 #define TIMING // Calculate and print timing information
 
 
-// Import util libraries
 #include "CycleTimer.h"
 #include "pixImage.h"
 
@@ -658,19 +657,15 @@ __global__ void kernelInitSuperPixels(FloatVec *sp_sums, LabColor *color_sums, i
  */
 __global__ void kernelUpdateSuperPixelMeans(FloatVec *sp_sums, LabColor *color_sums, int *sp_count) {
     
-    int threadId = blockDim.x * threadIdx.y + threadIdx.x;
     int spY = blockDim.y * blockIdx.y + threadIdx.y;
     int spX = blockDim.x * blockIdx.x + threadIdx.x;
     
     // *** TODO TRANSFER OVER CONSTANTS ***//
-    const int M_pix = cuGlobalConsts.M_pix;
-    const int N_pix = cuGlobalConsts.N_pix;
     const int in_width = cuGlobalConsts.in_width;
     const int in_height = cuGlobalConsts.in_height;
     const int out_width = cuGlobalConsts.out_width;
     const int out_height = cuGlobalConsts.out_height;
 
-    int *region_map = cuGlobalConsts.region_map;
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
     FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
@@ -817,7 +812,6 @@ __global__ void kernelAssociatetoSuperPixels(FloatVec *sp_sums, LabColor *color_
 
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
     int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
-    int threadId = threadIdx.x + blockDim.x * threadIdx.y;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
@@ -875,10 +869,8 @@ __global__ void kernelSmoothPositions(FloatVec *new_superPixel_pos) {
     
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    int threadId = threadIdx.x + blockDim.x * threadIdx.y;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
-    int N_pix = cuGlobalConsts.N_pix;
     int out_height = cuGlobalConsts.out_height;
     int out_width = cuGlobalConsts.out_width;
 
@@ -979,8 +971,6 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
     int out_width = cuGlobalConsts.out_width;
-    int out_height = cuGlobalConsts.out_height;
-    int K_colors = cuGlobalConsts.K_colors;
     float prob_sp = cuGlobalConsts.prob_sp;
     int *palette_size = cuGlobalConsts.palette_size;
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
@@ -1078,16 +1068,12 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
 /**
  * @brief Refine the palette
  */
-__global__ void kernelRefinePalette() {
+__global__ void kernelRefinePalette(float *palette_error) {
     
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    //TODO: RUN ON ONE KERNAL FOR NOW
-    if (index == 0){
+    int c = blockIdx.x * blockDim.x + threadIdx.x;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
-    int K_colors = cuGlobalConsts.K_colors;
     float prob_sp = cuGlobalConsts.prob_sp;
     
     int *palette_size = cuGlobalConsts.palette_size;
@@ -1095,17 +1081,9 @@ __global__ void kernelRefinePalette() {
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
     float *prob_c = cuGlobalConsts.prob_c;
     LabColor *palette_lab = cuGlobalConsts.palette_lab;
-    PalettePair *palette_pairs = cuGlobalConsts.palette_pairs;
-    bool *palette_complete = cuGlobalConsts.palette_complete;
-
-    bool *converged = cuGlobalConsts.converged;
-    float *T = cuGlobalConsts.T;
-
-
-    float palette_error = 0.f;
 
     //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
-    for (int c = 0; c < (*palette_size); c++){
+    if (c < (*palette_size)){
 
         LabColor c_sum = {0.0f,0.0f,0.0f};
         // Observe all superpixels to get sum of equation
@@ -1123,11 +1101,28 @@ __global__ void kernelRefinePalette() {
             palette_lab[c].b = c_sum.b/prob_c[c];
             LabColor curr = palette_lab[c];
 
-            palette_error += sqrtf(powf(last.L-curr.L, 2.0f) + powf(last.a-curr.a, 2.0f) + powf(last.b-curr.b, 2.0f));
+            atomicAdd(palette_error, sqrtf(powf(last.L-curr.L, 2.0f) + powf(last.a-curr.a, 2.0f) + powf(last.b-curr.b, 2.0f)));
         }
     }
-   
-    if (palette_error < kPaletteErrorTolerance) {
+}
+
+ __global__ void kernelExpandPalette(float *palette_error) {
+    
+    int c = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (c == 0) {
+    // // *** TODO TRANSFER OVER CONSTANTS ***//
+    int K_colors = cuGlobalConsts.K_colors;
+    
+    int *palette_size = cuGlobalConsts.palette_size;
+    LabColor *palette_lab = cuGlobalConsts.palette_lab;
+    PalettePair *palette_pairs = cuGlobalConsts.palette_pairs;
+    bool *palette_complete = cuGlobalConsts.palette_complete;
+
+    bool *converged = cuGlobalConsts.converged;
+    float *T = cuGlobalConsts.T; 
+
+    if ((*palette_error) < kPaletteErrorTolerance) {
         // check for convergence, lower temperature
         if ((*T) <= kTF) {
             (*converged) = true;
@@ -1167,7 +1162,7 @@ __global__ void kernelRefinePalette() {
             // should sort splits by distance here.
             if (curr > 0) {
                 #ifdef RUN_DEBUG
-                printf("expanding... %d, %d", (*palette_size), curr);
+                printf("expanding... %d, %d\n", (*palette_size), curr);
                 #endif
             }
 
@@ -1194,7 +1189,7 @@ __global__ void kernelRefinePalette() {
                     inlineCondensePalette();
                     break;
                 }
-            }       
+            }
             delete[] splits;
         }
     }
@@ -1675,9 +1670,11 @@ void PixImage :: runPixelate(){
         #endif
 
         cudaMemset(palette_error, 0, sizeof(float));
-        const int threadsPerBlock = 512;
-        const int blocks = (K_colors + threadsPerBlock - 1) / threadsPerBlock;
-        kernelRefinePalette<<<blocks, threadsPerBlock>>>();
+        const int threadsPerBlock = 1024;
+        const int blocks = (K_colors * 2 + threadsPerBlock - 1) / threadsPerBlock;
+        kernelRefinePalette<<<blocks, threadsPerBlock>>>(palette_error);
+        cudaDeviceSynchronize();
+        kernelExpandPalette<<<1, 10>>>(palette_error);
         cudaDeviceSynchronize();
         cudaMemcpy(converged, cuDev_converged, sizeof(bool), cudaMemcpyDeviceToHost);
         
