@@ -1755,18 +1755,5 @@ void PixImage :: runPixelate(){
 }
 
 void PixImage :: freeAll(){
-
-    free(input_img_lab);
-
-    free(output_img); 
-    free(sp_mean_lab); 
-
-    free(superPixel_pos);
-    free(region_map);
-
-    free(palette_lab); 
-    free(prob_c); 
-
-    free(buf_lab);
     
 }
