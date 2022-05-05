@@ -22,7 +22,7 @@
 #define kTF 1.0f
 #define kDT .7f
 #define kSubclusterTolerance 1.6f
-#define maxIter 188
+#define maxIter 1000
 
 #define BLOCK_DIM 32
 
@@ -154,9 +154,9 @@ class PixImage{
      * @brief 
      * 
      */
-    void initSuperPixels();
+    void initSuperPixels(FloatVec *sp_sums, LabColor *color_sums, int *sp_count);
 
-    void updateSuperPixelMeans();
+    void updateSuperPixelMeans(FloatVec *sp_sums, LabColor *color_sums, int *sp_count);
 
     void getAveragedPalette();
 

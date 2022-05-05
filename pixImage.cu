@@ -604,7 +604,7 @@ __global__ void kernelCreateInputLAB() {
 /**
  * @brief kernal that runs initSuperPixels on Device
  */
-__global__ void kernelInitSuperPixels() {
+__global__ void kernelInitSuperPixels(FloatVec *sp_sums, LabColor *color_sums, int *sp_count) {
 
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
     int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
@@ -616,6 +616,7 @@ __global__ void kernelInitSuperPixels() {
     int out_height = cuGlobalConsts.out_height;
     FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
     int *region_map = cuGlobalConsts.region_map;
+    LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
 
     // Get change in length of values
     float dx = (float) in_width/(float) out_width;
@@ -637,8 +638,16 @@ __global__ void kernelInitSuperPixels() {
         int x = (int) ((float) pixelX / dx);
         int y = (int) ((float) pixelY / dy);
 
+        LabColor curr_color = input_img_lab[in_width * pixelY + pixelX];
+
         // Set Value
         region_map[in_width * pixelY + pixelX] = out_width * y + x;
+        atomicAdd(&(sp_count[out_width * y + x]), 1);
+        atomicAdd(&(sp_sums[out_width * y + x].x), pixelX);
+        atomicAdd(&(sp_sums[out_width * y + x].y), pixelY);
+        atomicAdd(&(color_sums[out_width * y + x].L), curr_color.L);
+        atomicAdd(&(color_sums[out_width * y + x].a), curr_color.a);
+        atomicAdd(&(color_sums[out_width * y + x].b), curr_color.b);
     }
 
 }
@@ -646,11 +655,11 @@ __global__ void kernelInitSuperPixels() {
 /**
  * @brief kernal that runs updateSuperPixelMeans on Device
  */
-__global__ void kernelUpdateSuperPixelMeans() {
+__global__ void kernelUpdateSuperPixelMeans(FloatVec *sp_sums, LabColor *color_sums, int *sp_count) {
     
     int threadId = blockDim.x * threadIdx.y + threadIdx.x;
-    int spX = blockIdx.x;
-    int spY = blockIdx.y;
+    int spY = blockDim.y * blockIdx.y + threadIdx.y;
+    int spX = blockDim.x * blockIdx.x + threadIdx.x;
     
     // *** TODO TRANSFER OVER CONSTANTS ***//
     const int M_pix = cuGlobalConsts.M_pix;
@@ -664,69 +673,27 @@ __global__ void kernelUpdateSuperPixelMeans() {
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
     FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
-
-    int spidx = spX + spY * out_width;
-
-    __shared__ FloatVec sp_sum;
-    __shared__ LabColor color_sum;
-    __shared__ int sp_count;
-    __shared__ int iteration;
-
-    if (threadId == 0) {
-        sp_sum.x = 0.f;
-        sp_sum.y = 0.f;
-        color_sum.L = 0.f;
-        color_sum.a = 0.f;
-        color_sum.b = 0.f;
-        sp_count = 0;
-        iteration = 0;
-    }
-
-    __syncthreads();
-
-    // Find the mean colors (from input image) for each superpixel
-    while (iteration * BLOCK_DIM * BLOCK_DIM < M_pix) {
-
-        int idx = threadId + iteration * BLOCK_DIM * BLOCK_DIM;
-
-        if (idx < M_pix && region_map[idx] == spidx) {
-            atomicAdd(&(sp_sum.x), idx % in_width);
-            atomicAdd(&(sp_sum.y), idx / in_width);
-
-            atomicAdd(&color_sum.L, input_img_lab[idx].L);
-            atomicAdd(&color_sum.a, input_img_lab[idx].a);
-            atomicAdd(&color_sum.b, input_img_lab[idx].b);
-
-            atomicAdd(&sp_count, 1);
-        }
-        
-        if (threadId == 0) {
-            iteration ++;
-        }
-        __syncthreads();
-    }
     
     // Repostion superpixels and update the output color pallete
-    if (threadId == 0) {
-
-        if (sp_count == 0) {
+    if (spX < out_width && spY < out_height) {
+        int spidx = spX + spY * out_width;
+        if (sp_count[spidx] == 0) {
             float dx = (float) in_width/(float) out_width;
             float dy = (float) in_height/(float) out_height;
             float x = ((float) spX + 0.5f) * dx;
             float y = ((float) spY + 0.5f) * dy;
             sp_mean_lab[spidx] = input_img_lab[((int) round(y))*in_width + ((int) round(x))];
         } else {
-
             // Calculate new position for super pixel
-            float x = sp_sum.x / sp_count;
-            float y = sp_sum.y / sp_count;
+            float x = sp_sums[spidx].x / sp_count[spidx];
+            float y = sp_sums[spidx].y / sp_count[spidx];
             FloatVec newpos = {x, y};
             superPixel_pos[spidx] = newpos;
 
             // Set output_img_lab to new mean value
-            sp_mean_lab[spidx].L = color_sum.L/sp_count;
-            sp_mean_lab[spidx].a = color_sum.a/sp_count;
-            sp_mean_lab[spidx].b = color_sum.b/sp_count;
+            sp_mean_lab[spidx].L = color_sums[spidx].L/sp_count[spidx];
+            sp_mean_lab[spidx].a = color_sums[spidx].a/sp_count[spidx];
+            sp_mean_lab[spidx].b = color_sums[spidx].b/sp_count[spidx];
         }
     }
 }
@@ -843,7 +810,7 @@ __global__ void kernelGetAveragedPalette() {
 /**
  * @brief Associate Pixels to specific super pixels
  */
-__global__ void kernelAssociatetoSuperPixels() {
+__global__ void kernelAssociatetoSuperPixels(FloatVec *sp_sums, LabColor *color_sums, int *sp_count) {
 
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
     int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
@@ -869,7 +836,8 @@ __global__ void kernelAssociatetoSuperPixels() {
         int max_x = (pixelX + S < (in_width - 1)) ? pixelX + S : in_width - 1;
         int max_y = (pixelY + S < (in_height - 1)) ? pixelY + S : in_height - 1;
         int curr_idx = pixelY * in_width + pixelX;
-        
+        LabColor curr_color = input_img_lab[curr_idx];
+
         for (int idx = 0; idx < N_pix; idx++) {
             int x = (int) round(superPixel_pos[idx].x);
             int y = (int) round(superPixel_pos[idx].y);
@@ -877,8 +845,8 @@ __global__ void kernelAssociatetoSuperPixels() {
                 (min_y <= y && y <= max_y)) {
                 LabColor sp_color = average_palette[palette_assign[idx]];
                 float dist_new = cuDevDist_k(m_gerstner, S, sp_color.L, sp_color.a, sp_color.b, 
-                                        x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
-                                        input_img_lab[curr_idx].b, pixelX, pixelY);
+                                        x, y, curr_color.L, curr_color.a, 
+                                        curr_color.b, pixelX, pixelY);
                 
                 if (distance < 0.f || dist_new < distance) {
                     distance = dist_new;
@@ -888,6 +856,13 @@ __global__ void kernelAssociatetoSuperPixels() {
         }
         
         region_map[curr_idx] = min;
+
+        atomicAdd(&(sp_count[min]), 1);
+        atomicAdd(&(sp_sums[min].x), pixelX);
+        atomicAdd(&(sp_sums[min].y), pixelY);
+        atomicAdd(&(color_sums[min].L), curr_color.L);
+        atomicAdd(&(color_sums[min].a), curr_color.a);
+        atomicAdd(&(color_sums[min].b), curr_color.b);
     }
 }
 /**
@@ -1341,7 +1316,7 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
 /**
  * @brief Initializes the superPixel_pos array and the region_map array
  */
-void PixImage :: initSuperPixels(){
+void PixImage :: initSuperPixels(FloatVec *sp_sums, LabColor *color_sums, int *sp_count){
     
     // Intialize size of kernal
     dim3 blockDim(BLOCK_DIM, BLOCK_DIM, 1);
@@ -1349,19 +1324,19 @@ void PixImage :: initSuperPixels(){
             (in_height + blockDim.y - 1) / blockDim.y);
 
 
-    kernelInitSuperPixels<<<gridDim, blockDim>>>();
+    kernelInitSuperPixels<<<gridDim, blockDim>>>(sp_sums, color_sums, sp_count);
     cudaDeviceSynchronize();
 
 }
 
-void PixImage :: updateSuperPixelMeans(){
+void PixImage :: updateSuperPixelMeans(FloatVec *sp_sums, LabColor *color_sums, int *sp_count){
     
     // Intialize size of kernal
     dim3 blockDim(BLOCK_DIM,BLOCK_DIM, 1);
-    dim3 gridDim(out_width,out_height);
+    dim3 gridDim((out_width + blockDim.x - 1) / blockDim.x,
+            (out_height + blockDim.y - 1) / blockDim.y);
 
-
-    kernelUpdateSuperPixelMeans<<<gridDim, blockDim>>>();
+    kernelUpdateSuperPixelMeans<<<gridDim, blockDim>>>(sp_sums, color_sums, sp_count);
     cudaDeviceSynchronize();
 }
 
@@ -1481,9 +1456,19 @@ void PixImage :: initialize(){
     kernelCreateInputLAB<<<gridDim, blockDim>>>();
     cudaDeviceSynchronize();
 
+    FloatVec *sp_sums;
+    LabColor *color_sums;
+    int *sp_count;
+    cudaMalloc(&sp_sums, N_pix *sizeof(FloatVec));
+    cudaMalloc(&color_sums, N_pix * sizeof(LabColor));
+    cudaMalloc(&sp_count, N_pix * sizeof(int));
+    cudaMemset(sp_sums, 0, N_pix *sizeof(FloatVec));
+    cudaMemset(color_sums, 0, N_pix * sizeof(LabColor));
+    cudaMemset(sp_count, 0, N_pix * sizeof(int));
+
     ///*** Initialize Superpixel Values ***///
-    initSuperPixels();
-    updateSuperPixelMeans();
+    initSuperPixels(sp_sums, color_sums, sp_count);
+    updateSuperPixelMeans(sp_sums, color_sums, sp_count);
 
 
     ///*** Initialize Palette Values ***///
@@ -1526,6 +1511,13 @@ void PixImage :: runPixelate(){
     FloatVec *new_superPixel_pos;
     cudaMalloc(&new_prob_c, K_colors * 2 * sizeof(float));
     cudaMalloc(&new_superPixel_pos, N_pix * sizeof(FloatVec));
+    
+    FloatVec *sp_sums;
+    LabColor *color_sums;
+    int *sp_count;
+    cudaMalloc(&sp_sums, N_pix *sizeof(FloatVec));
+    cudaMalloc(&color_sums, N_pix * sizeof(LabColor));
+    cudaMalloc(&sp_count, N_pix * sizeof(int));
 
     #ifdef TIMING
     endInitializeTime = CycleTimer::currentSeconds();
@@ -1563,12 +1555,15 @@ void PixImage :: runPixelate(){
         #ifdef TIMING
         start4_2AssociateTime = CycleTimer::currentSeconds();
         #endif
+        cudaMemset(sp_sums, 0, N_pix *sizeof(FloatVec));
+        cudaMemset(color_sums, 0, N_pix * sizeof(LabColor));
+        cudaMemset(sp_count, 0, N_pix * sizeof(int));
         
         dim3 blockDim0(BLOCK_DIM, BLOCK_DIM, 1);
         dim3 gridDim0((in_width + blockDim0.x - 1) / blockDim0.x,
             (in_height + blockDim0.y - 1) / blockDim0.y);
 
-        kernelAssociatetoSuperPixels<<<gridDim0, blockDim0>>>();
+        kernelAssociatetoSuperPixels<<<gridDim0, blockDim0>>>(sp_sums, color_sums, sp_count);
         cudaDeviceSynchronize();
        
         #ifdef TIMING
@@ -1581,7 +1576,7 @@ void PixImage :: runPixelate(){
         start4_2UpdateTime = CycleTimer::currentSeconds();
         #endif
 
-        updateSuperPixelMeans();
+        updateSuperPixelMeans(sp_sums, color_sums, sp_count);
 
         #ifdef TIMING
         total4_2UpdateTime += (CycleTimer::currentSeconds() - start4_2UpdateTime);
