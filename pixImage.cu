@@ -868,7 +868,6 @@ __global__ void kernelAssociatetoSuperPixels() {
     int *palette_assign = cuGlobalConsts.palette_assign;
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
     LabColor *average_palette = cuGlobalConsts.average_palette;
-    LabColor *palette_lab = cuGlobalConsts.palette_lab;
 
     //Global bois
     float *distance = new float[M_pix];
@@ -888,7 +887,7 @@ __global__ void kernelAssociatetoSuperPixels() {
             int x = (int) round(center.x);
             int y = (int) round(center.y);
 
-            LabColor sp_color = palette_lab[palette_assign[idx]];
+            LabColor sp_color = average_palette[palette_assign[idx]];
 
             // within region
             for (int yy = min_y; yy <= max_y; ++yy) {
