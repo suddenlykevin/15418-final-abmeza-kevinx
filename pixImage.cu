@@ -870,6 +870,8 @@ __global__ void kernelGetAveragedPalette() {
                         ca.a*weight_a + cb.a*weight_b,
                         ca.b*weight_a + cb.b*weight_b};
         
+        printf("average: (%f, %f %f), %d: %f, %f\n", avg.L, avg.a, avg.b, i, prob_c[pair.a], prob_c[pair.b]);
+        
         average_palette[pair.a] = avg;
         average_palette[pair.b] = avg;
     }
@@ -1078,7 +1080,7 @@ __global__ void kernelAssociateToPalette() {
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
     int K_colors = cuGlobalConsts.K_colors;
-    int prob_sp = cuGlobalConsts.prob_sp;
+    float prob_sp = cuGlobalConsts.prob_sp;
     
 
     int *palette_size = cuGlobalConsts.palette_size;
@@ -1095,13 +1097,13 @@ __global__ void kernelAssociateToPalette() {
 
     memset(new_prob_c, 0, (*palette_size) * sizeof(float));
     memset(prob_c_if_sp, 0, K_colors * 2 * N_pix *sizeof(float));
-    
+        
     // Update superpixel colors from color palette based on P(c_k|p_s) calculation
     for(int p = 0; p < N_pix; p++) {
         // Get the best color value to update the superpixel color
         int best_c = -1;
         float best_norm_val = 0.0f;
-        double sum_prob = 0;
+        double sum_prob = 0.0f;
         double *probs = new double[*palette_size];
 
         for (int c = 0; c < (*palette_size); c++){
@@ -1113,7 +1115,7 @@ __global__ void kernelAssociateToPalette() {
             pixDiff.b = sp_mean_lab[p].b - palette_lab[c].b;
 
             // || m_s' - c_k ||
-            float norm_val = sqrtf(powf(pixDiff.L, 2.f) + powf(pixDiff.a, 2.f) + powf(pixDiff.b, 2.f));
+            float norm_val = sqrt(pow(pixDiff.L, 2.f) + pow(pixDiff.a, 2.f) + pow(pixDiff.b, 2.f));
 
             //  - (|| m_s' - c_k ||/T)
             float pow_val = -1.0f*(norm_val/(*T));
@@ -1149,7 +1151,7 @@ __global__ void kernelAssociateToPalette() {
 
     }
     
-
+    
 }
 
 /**
@@ -1167,7 +1169,7 @@ __global__ void kernelRefinePalette() {
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
     int K_colors = cuGlobalConsts.K_colors;
-    int prob_sp = cuGlobalConsts.prob_sp;
+    float prob_sp = cuGlobalConsts.prob_sp;
     
     int *palette_size = cuGlobalConsts.palette_size;
     float *prob_c_if_sp = cuGlobalConsts.prob_c_if_sp;
@@ -1388,7 +1390,7 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
     average_palette = NULL; 
 
     prob_c = NULL;      
-    prob_sp = 1.0f/(out_width*out_height);
+    prob_sp = 1.0f/(out_width*out_height);      
     prob_c_if_sp = NULL;   
 
     T = 0.0f;  
