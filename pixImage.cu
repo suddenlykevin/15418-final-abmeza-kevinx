@@ -103,7 +103,7 @@ __device__ __inline__ int cuDevMax(int item1, int item2) {
 }
 
 __device__ __inline__ int cuDevMin(int item1, int item2) {
-    return (item1 >= item2) ? item2 : item2;
+    return (item1 >= item2) ? item2 : item1;
 }
 
 __device__ __inline__ int cuDevMaxEigen3(float *matrix, float *value, LabColor *vector) {
@@ -893,70 +893,63 @@ __global__ void kernelAssociatetoSuperPixels() {
 /**
  * @brief Associate Pixels to specific super pixels
  */
-__global__ void kernelSmoothPositions() {
+__global__ void kernelSmoothPositions(FloatVec *new_superPixel_pos) {
     
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    //TODO: RUN ON ONE KERNAL FOR NOW
-    if (index == 0){
-    
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+    int threadId = threadIdx.x + blockDim.x * threadIdx.y;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int N_pix = cuGlobalConsts.N_pix;
     int out_height = cuGlobalConsts.out_height;
     int out_width = cuGlobalConsts.out_width;
 
+    int spidx = i + out_width * j;
+
     FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
     LabColor *buf_lab = cuGlobalConsts.buf_lab;
 
     // smooth positions
-    for (int j = 0; j < out_height; j++) {
-        for (int i = 0; i < out_width; i++) {                
-            int spidx = j*out_width + i;
-            FloatVec sum = {0, 0};
-            float count = 0.0f;
-            if(i > 0) {
-                sum.x += superPixel_pos[j*out_width + i-1].x;
-                sum.y += superPixel_pos[j*out_width + i-1].y;
-                count += 1.0f;
-            }
-            if(i < out_width -1) {
-                sum.x += superPixel_pos[j*out_width + i+1].x;
-                sum.y += superPixel_pos[j*out_width + i+1].y;
-                count += 1.0f;
-            }
-            if(j > 0) {
-                sum.x += superPixel_pos[(j-1)*out_width + i].x;
-                sum.y += superPixel_pos[(j-1)*out_width + i].y;
-                count += 1.0f;
-            }
-            if(j < out_height - 1) {
-                sum.x += superPixel_pos[(j+1)*out_width + i].x;
-                sum.y += superPixel_pos[(j+1)*out_width + i].y;
-                count += 1.0f;
-            }
-            sum.x /= count;
-            sum.y /= count;
-            FloatVec pos = superPixel_pos[spidx];
-            FloatVec newPos = {0, 0};
-            if(i == 0 || i == out_width -1) {
-                newPos.x = pos.x;
-            } else {
-                newPos.x = (0.55f)*pos.x + 0.45f*sum.x;
-            }
-            if(j == 0 || j == out_height - 1) {
-                newPos.y = pos.y;
-            } else {
-                newPos.y = 0.55f*pos.y + 0.45f*sum.y;
-            }
-            superPixel_pos[spidx] = newPos;
+    if (i < out_width && j < out_height) {    
+        FloatVec sum = {0, 0};
+        float count = 0.0f;
+        if(i > 0) {
+            sum.x += superPixel_pos[j*out_width + i-1].x;
+            sum.y += superPixel_pos[j*out_width + i-1].y;
+            count += 1.0f;
         }
-    }
+        if(i < out_width -1) {
+            sum.x += superPixel_pos[j*out_width + i+1].x;
+            sum.y += superPixel_pos[j*out_width + i+1].y;
+            count += 1.0f;
+        }
+        if(j > 0) {
+            sum.x += superPixel_pos[(j-1)*out_width + i].x;
+            sum.y += superPixel_pos[(j-1)*out_width + i].y;
+            count += 1.0f;
+        }
+        if(j < out_height - 1) {
+            sum.x += superPixel_pos[(j+1)*out_width + i].x;
+            sum.y += superPixel_pos[(j+1)*out_width + i].y;
+            count += 1.0f;
+        }
+        sum.x /= count;
+        sum.y /= count;
+        FloatVec pos = superPixel_pos[spidx];
+        FloatVec newPos = {0, 0};
 
-    // smooth colors
-    for(int j = 0; j < out_height; ++j) {
-        for(int i = 0; i < out_width; ++i) {
+        if(i == 0 || i == out_width -1) {
+            newPos.x = pos.x;
+        } else {
+            newPos.x = (0.55f)*pos.x + 0.45f*sum.x;
+        }
+        if(j == 0 || j == out_height - 1) {
+            newPos.y = pos.y;
+        } else {
+            newPos.y = 0.55f*pos.y + 0.45f*sum.y;
+        }
+        new_superPixel_pos[spidx] = newPos;
 
         //get bounds of 3x3 kernel (make sure we don't go off the image)
         int min_x = cuDevMax(0,i-1);
@@ -965,12 +958,11 @@ __global__ void kernelSmoothPositions() {
         int max_y = cuDevMin(out_height-1,j+1);
 
         //Initialize
-        LabColor sum = {0.f, 0.f, 0.f};
+        LabColor c_sum = {0.f, 0.f, 0.f};
         float weight = 0.f;
 
         //get current SP color and (grid) position
         LabColor superpixel_color = sp_mean_lab[j*out_width + i];
-        //FloatVec p = {(float) j, (float) i};
 
         //get bilaterally weighted average color of SP neighborhood
         for(int ii = min_x; ii<= max_x; ++ii) {
@@ -981,26 +973,20 @@ __global__ void kernelSmoothPositions() {
                                             powf(superpixel_color.a - c_n.a, 2.f) +
                                             powf(superpixel_color.b - c_n.b, 2.f));
             float w_color = cuDevGaussian(d_color, 2.0f ,0.0f);
-            float d_pos = (float) sqrtf(powf((float) i-ii, 2.f) + powf((float) j-jj, 2.f));
+            float d_pos = (float) sqrt(pow((float) i-ii, 2.f) + pow((float) j-jj, 2.f));
             float w_pos = cuDevGaussian(d_pos, 0.97f, 0.0f);
             float w_total = w_color*w_pos;
 
             weight += w_total;
-            sum.L += c_n.L*w_total;
-            sum.a += c_n.a*w_total;
-            sum.b += c_n.b*w_total;
+            c_sum.L += c_n.L*w_total;
+            c_sum.a += c_n.a*w_total;
+            c_sum.b += c_n.b*w_total;
             }
         }
-        sum.L *= 1.0f/weight;
-        sum.a *= 1.0f/weight;
-        sum.b *= 1.0f/weight;
-        buf_lab[j*out_width + i] = sum;
-        }
-    }
-    
-    //update the SP mean colors with the smoothed values
-    memcpy(sp_mean_lab, buf_lab, N_pix * sizeof(LabColor));
-
+        c_sum.L *= 1.0f/weight;
+        c_sum.a *= 1.0f/weight;
+        c_sum.b *= 1.0f/weight;
+        buf_lab[j*out_width + i] = c_sum;
     }
 }
 /**
@@ -1537,7 +1523,9 @@ void PixImage :: runPixelate(){
     int iter = 0;
 
     float *new_prob_c;
+    FloatVec *new_superPixel_pos;
     cudaMalloc(&new_prob_c, K_colors * 2 * sizeof(float));
+    cudaMalloc(&new_superPixel_pos, N_pix * sizeof(FloatVec));
 
     #ifdef TIMING
     endInitializeTime = CycleTimer::currentSeconds();
@@ -1604,9 +1592,13 @@ void PixImage :: runPixelate(){
         start4_2SmoothTime = CycleTimer::currentSeconds();
         #endif
 
-        dim3 blockDim1(1, 1, 1);
-        dim3 gridDim1(1,1);
-        kernelSmoothPositions<<<1, 10>>>();
+        dim3 blockDim1(BLOCK_DIM, BLOCK_DIM, 1);
+        dim3 gridDim1((out_width + blockDim1.x - 1) / blockDim1.x,
+            (out_height + blockDim1.y - 1) / blockDim1.y);
+        kernelSmoothPositions<<<gridDim1, blockDim1>>>(new_superPixel_pos);
+        
+        cudaMemcpy(cuDev_sp_mean_lab, cuDev_buf_lab, N_pix * sizeof(LabColor), cudaMemcpyDeviceToDevice);
+        cudaMemcpy(cuDev_superPixel_pos, new_superPixel_pos, N_pix * sizeof(FloatVec), cudaMemcpyDeviceToDevice);
         cudaDeviceSynchronize();
 
         #ifdef TIMING
