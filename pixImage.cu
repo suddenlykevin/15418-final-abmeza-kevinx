@@ -39,9 +39,6 @@
 #include <algorithm> 
 #include <stack>
 #include <cmath>
-
-#define SCAN_BLOCK_DIM BLOCK_DIM * BLOCK_DIM  // needed by sharedMemExclusiveScan implementation
-#include "exclusiveScan.cu_inl"
 using namespace std;
 
 
