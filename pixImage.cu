@@ -290,8 +290,8 @@ __device__ __inline__ float cuDevLABtoZ(float L, float a, float b) {
 }
 
 __device__ __inline__ void cuDevrgb2lab(int R, int G, int B, float *L, float *a, float *b) {
-    // printf("_RGB2LAB_\n");
-    // printf("(R:%d,G:%d,B:%d)->",R,G,B);
+    //printf("_RGB2LAB_ %f\n", labXr_32f);
+    //printf("(R:%d,G:%d,B:%d)->",R,G,B);
     float Rf = cuDevLinearize(R);
     float Gf = cuDevLinearize(G);
     float Bf = cuDevLinearize(B);
@@ -420,10 +420,10 @@ __device__ __inline__ void pushPaletteColor(LabColor color, float prob) {
     float *prob_c = cuGlobalConsts.prob_c;
     int *palette_size = cuGlobalConsts.palette_size;
     printf("---Runninf pushPaletteColor\n");
-    printf("---Runninf %x %x %x %d\n",palette_lab, prob_c, palette_size,*palette_size);
+    printf("---Runninf %x %x %x %d\n",palette_lab, prob_c, palette_size, *palette_size);
 
     palette_lab[*palette_size] = color;
-    printf("---dsa pushPaletteColor %f %f\n",prob);
+    printf("---dsa pushPaletteColor (%f, %f, %f)\n", color.L, color.a, color.b);
 
     prob_c[*palette_size] = prob;
     
@@ -622,10 +622,9 @@ __global__ void kernelCreateInputLAB() {
 
     unsigned char *p; 
     LabColor *pl;
-    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*3); p += 3, pl ++) 
+    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*3); p += 3, pl ++) {
         cuDevrgb2lab(*p, *(p+1), *(p+2), &(pl->L), &(pl->a), &(pl->b));
-
-    
+    }
     }
 }
 /**
@@ -1373,7 +1372,6 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
     #endif
 
     // Init Them Arrays
-    input_img = NULL; 
     input_img_lab = NULL;
 
     output_img = NULL; 
@@ -1390,7 +1388,7 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
     average_palette = NULL; 
 
     prob_c = NULL;      
-    prob_sp = 0.0f;      
+    prob_sp = 1.0f/(out_width*out_height);
     prob_c_if_sp = NULL;   
 
     T = 0.0f;  
@@ -1462,26 +1460,6 @@ void PixImage :: getAveragedPalette() {
 }
 
 void PixImage :: initVariables(){
-    ///*** Allocate Array Space ***///
-    input_img_lab = (LabColor *) wrp_calloc(M_pix, sizeof(LabColor));
-
-    superPixel_pos = (FloatVec *) wrp_calloc(N_pix, sizeof(FloatVec)); 
-    region_map = (int *) wrp_calloc(M_pix, sizeof(int));
-
-    palette_lab = (LabColor *) wrp_calloc(K_colors * 2 , sizeof(LabColor));
-    average_palette = (LabColor *) wrp_calloc(K_colors * 2 , sizeof(LabColor)); 
-    palette_size = 0;
-    palette_pairs = (PalettePair *) wrp_calloc(K_colors, sizeof(PalettePair));
-    palette_assign = (int *) wrp_calloc(N_pix, sizeof(int));
-    prob_c = (float *) wrp_calloc(K_colors * 2 , sizeof(float)); 
-    prob_c_if_sp = (float *) wrp_calloc(K_colors * 2 * N_pix, sizeof(float));
-    prob_sp = 1.0f/(out_width*out_height); 
-
-    buf_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor));
-    output_img = (unsigned char *) wrp_malloc(N_pix * 3); 
-    spoutput_img = (unsigned char *) wrp_calloc(M_pix*3, sizeof(unsigned char));
-    sp_mean_lab = (LabColor *) wrp_calloc(N_pix, sizeof(LabColor)); 
-
     // Allocate space for Device, place in global for easy access
 
     cudaMalloc(&cuDev_input_img, 3*M_pix*sizeof(unsigned char));
@@ -1519,7 +1497,7 @@ void PixImage :: initVariables(){
     cudaMemset(cuDev_palette_lab, 0, K_colors * 2 *sizeof(LabColor));
     cudaMemset(cuDev_average_palette, 0, K_colors * 2 *sizeof(LabColor));
     cudaMemset(cuDev_prob_c, 0, K_colors * 2 * sizeof(float));
-    cudaMemset(cuDev_prob_c_if_sp,0, K_colors * 2 * N_pix * sizeof(float));
+    cudaMemset(cuDev_prob_c_if_sp, 0, K_colors * 2 * N_pix * sizeof(float));
         
     cudaMemset(cuDev_palette_size , 0, sizeof(int));
     cudaMemset(cuDev_palette_complete, false, sizeof(bool));
@@ -1541,7 +1519,6 @@ void PixImage :: initVariables(){
     params.N_pix = N_pix;
 
     params.K_colors = K_colors;
-    params.palette_size = &palette_size;
 
     params.prob_sp = prob_sp;
 

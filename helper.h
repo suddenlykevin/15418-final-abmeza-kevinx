@@ -140,23 +140,23 @@ void* wrp_calloc(size_t nitems, size_t size);
 #define rgbLPowInv_32f 0.4166666667f
 #define rgbSmallScale_32f 12.92f
 
-/** @brief Converts RGB (0-255) values to CIELAB colorspace
- * @param[in] R red channel (0-255)
- * @param[in] G green channel (0-255)
- * @param[in] B blue channel (0-255)
- * @param[out] L lightness channel (0-100)
- * @param[out] a axis (-128 - 128)
- * @param[out] b axis (-128 - 128)
- **/
-void rgb2lab(int R, int G, int B, float *L, float *a, float *b);
+// /** @brief Converts RGB (0-255) values to CIELAB colorspace
+//  * @param[in] R red channel (0-255)
+//  * @param[in] G green channel (0-255)
+//  * @param[in] B blue channel (0-255)
+//  * @param[out] L lightness channel (0-100)
+//  * @param[out] a axis (-128 - 128)
+//  * @param[out] b axis (-128 - 128)
+//  **/
+// void rgb2lab(int R, int G, int B, float *L, float *a, float *b);
 
-/** @brief Converts RGB (0-255) values to CIELAB colorspace
- * @param[out] R red channel (0-255)
- * @param[out] G green channel (0-255)
- * @param[out] B blue channel (0-255)
- * @param[in] L lightness channel (0-100)
- * @param[in] a axis (-128 - 128)
- * @param[in] b axis (-128 - 128)
- **/
-void lab2rgb(float L, float a, float b, unsigned char *R, unsigned char *G, unsigned char *B);
+// /** @brief Converts RGB (0-255) values to CIELAB colorspace
+//  * @param[out] R red channel (0-255)
+//  * @param[out] G green channel (0-255)
+//  * @param[out] B blue channel (0-255)
+//  * @param[in] L lightness channel (0-100)
+//  * @param[in] a axis (-128 - 128)
+//  * @param[in] b axis (-128 - 128)
+//  **/
+// void lab2rgb(float L, float a, float b, unsigned char *R, unsigned char *G, unsigned char *B);
 

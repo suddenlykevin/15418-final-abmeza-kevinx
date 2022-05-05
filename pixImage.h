@@ -14,15 +14,15 @@
 #include "helper.h"
 
 // GLOBAL CONSTANTS
-const float T_f = 1.0f; //<- T final, dictates when we finish our core algorithm (TODO: Edit)
-const int m_gerstner = 45; //<- 
-const float kSubclusterPertubation = .8f; //<- amount to perturb subcluster of each palette color
-const float kT0SafetyFactor = 1.1f; //<- initial temperature is 1.1*T_c
-const float kPaletteErrorTolerance = 1.0f;
-const float kTF = 1.0f;
-const float kDT = .7f;
-const float kSubclusterTolerance = 1.6f;
-const int maxIter = 1000;
+#define T_f 1.0f //<- T final, dictates when we finish our core algorithm (TODO: Edit)
+#define m_gerstner 45 //<- 
+#define kSubclusterPertubation .8f //<- amount to perturb subcluster of each palette color
+#define kT0SafetyFactor 1.1f //<- initial temperature is 1.1*T_c
+#define kPaletteErrorTolerance 1.0f
+#define kTF 1.0f
+#define kDT .7f
+#define kSubclusterTolerance 1.6f
+#define maxIter 1000
 
 /**
  * @brief position vector data structure
