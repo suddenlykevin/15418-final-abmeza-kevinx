@@ -20,7 +20,7 @@
 
 // Constants to regulate what we print
 //#define DEBUG     // misc. debug statements
-//#define RUN_DEBUG // debug statements that check running progress
+#define RUN_DEBUG // debug statements that check running progress
 #define TIMING // Calculate and print timing information
 
 
@@ -73,7 +73,7 @@ struct GlobalConstants {
     int *palette_assign; //<- palette assignment for each superpixel
     LabColor *palette_lab; //<- palette array with color values in palette
     LabColor *average_palette; //<- average palette array with average color values
-   
+    
     bool *palette_complete; //<- POINTER SO WE CAN MODIFY
 
     float *prob_c;         //<- array of probabiities that a color in the palette is set to ANY super pixel
@@ -159,8 +159,8 @@ __device__ __inline__ int cuDevMaxEigen3(float *matrix, float *value, LabColor *
 
 __device__ __inline__ float cuDevDist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
            float l_i, float a_i, float b_i, int x_i, int y_i) {
-    float d_lab = sqrtf(powf(l_k - l_i, 2.f) + powf(a_k - a_i, 2.f) + powf(b_k - b_i, 2.f));
-    float d_xy = sqrtf(powf((float) x_k - x_i, 2.f) + powf((float) y_k - y_i, 2.f));
+    float d_lab = sqrt(pow(l_k - l_i, 2.f) + pow(a_k - a_i, 2.f) + pow(b_k - b_i, 2.f));
+    float d_xy = sqrt(pow((float) x_k - x_i, 2.f) + pow((float) y_k - y_i, 2.f));
     float k = ((float) m) / S;
     return d_lab + k * d_xy;
 }
@@ -585,33 +585,29 @@ __device__ __inline__ void inlineCondensePalette() {
  */
 __global__ void kernelCreateInputLAB() {
 
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    //TODO: RUN ON ONE KERNAL FOR NOW
-    if (index == 0){
+    int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
+    int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
     
     // *** TODO TRANSFER OVER CONSTANTS ***//
-    int M_pix = cuGlobalConsts.M_pix;
+    int in_height = cuGlobalConsts.in_height;
+    int in_width = cuGlobalConsts.in_width;
     unsigned char *input_img = cuGlobalConsts.input_img;
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
 
-
-    unsigned char *p; 
-    LabColor *pl;
-    for(p = input_img, pl = input_img_lab; p != input_img + (M_pix*3); p += 3, pl ++) {
-        cuDevrgb2lab(*p, *(p+1), *(p+2), &(pl->L), &(pl->a), &(pl->b));
-    }
+    if (pixelX < in_width && pixelY < in_height) {
+        int idx = pixelX + pixelY * in_width;
+        cuDevrgb2lab(input_img[idx*3], input_img[idx*3 + 1], input_img[idx*3 + 2], 
+                    &input_img_lab[idx].L, &input_img_lab[idx].a, &input_img_lab[idx].b);
     }
 }
+
 /**
  * @brief kernal that runs initSuperPixels on Device
  */
 __global__ void kernelInitSuperPixels() {
 
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    //TODO: RUN ON ONE KERNAL FOR NOW
-    if (index == 0){
+    int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
+    int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
     int in_width = cuGlobalConsts.in_width;
@@ -621,40 +617,32 @@ __global__ void kernelInitSuperPixels() {
     FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
     int *region_map = cuGlobalConsts.region_map;
 
-
     // Get change in length of values
     float dx = (float) in_width/(float) out_width;
     float dy = (float) in_height/(float) out_height;
 
     // initialize superpixel positions (centers)
-    for (int j = 0; j < out_height; ++j) {
-        for (int i = 0; i < out_width; ++i) {
-
-            // Calculate midpoint value
-            float x = ((float) i + 0.5f) * dx;
-            float y = ((float) j + 0.5f) * dy;
-            FloatVec pos =  (FloatVec) {x,y};
-            // Set value
-            superPixel_pos[out_width * j + i] = pos;
-
-
-        }
+    if (pixelX < out_width && pixelY < out_height) {
+        // Calculate midpoint value
+        float x = ((float) pixelX + 0.5f) * dx;
+        float y = ((float) pixelY + 0.5f) * dy;
+        FloatVec pos =  (FloatVec) {x,y};
+        // Set value
+        superPixel_pos[out_width * pixelY + pixelX] = pos;
     }
 
     // Initial assignment of pixels to a specific superpxel  
-    for (int j = 0; j < in_height; ++j) {
-        for (int i = 0; i < in_width; ++i) {
-            // Calculate which superpixel to set
-            int x = (int) ((float) i / dx);
-            int y = (int) ((float) j / dy);
+    if (pixelX < in_width && pixelY < in_height) {
+        // Calculate which superpixel to set
+        int x = (int) ((float) pixelX / dx);
+        int y = (int) ((float) pixelY / dy);
 
-            // Set Value
-            region_map[in_width * j + i] = out_width * y + x;
-        }
+        // Set Value
+        region_map[in_width * pixelY + pixelX] = out_width * y + x;
     }
 
-    }
 }
+
 /**
  * @brief kernal that runs updateSuperPixelMeans on Device
  */
@@ -848,18 +836,13 @@ __global__ void kernelGetAveragedPalette() {
  * @brief Associate Pixels to specific super pixels
  */
 __global__ void kernelAssociatetoSuperPixels() {
-    
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-    //TODO: RUN ON ONE KERNAL FOR NOW
-    if (index == 0){
-    
+    int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
+    int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
 
     // *** TODO TRANSFER OVER CONSTANTS ***//
-    int M_pix = cuGlobalConsts.M_pix;
+    int N_pix = cuGlobalConsts.N_pix;
     float S = cuGlobalConsts.S;
-    int out_height = cuGlobalConsts.out_height;
-    int out_width = cuGlobalConsts.out_width;
     int in_height = cuGlobalConsts.in_height;
     int in_width = cuGlobalConsts.in_width;
 
@@ -869,47 +852,33 @@ __global__ void kernelAssociatetoSuperPixels() {
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
     LabColor *average_palette = cuGlobalConsts.average_palette;
 
-    //Global bois
-    float *distance = new float[M_pix];
-
-    for (int i = 0; i < M_pix; i++) distance[i] = -1.0f;
-    
-    for (int j = 0; j < out_height; ++j) {
-        for (int i = 0; i < out_width; ++i) {
-            
-            // get local region
-            int idx = out_width * j + i;
-            FloatVec center = superPixel_pos[idx];
-            int min_x = (int) fmaxf(0.0f, center.x - S);
-            int min_y = (int) fmaxf(0.0f, center.y - S);
-            int max_x = (int) fminf((float) (in_width - 1), center.x + S);
-            int max_y = (int) fminf((float) (in_height - 1), center.y + S);            
-            int x = (int) round(center.x);
-            int y = (int) round(center.y);
-
-            LabColor sp_color = average_palette[palette_assign[idx]];
-
-            // within region
-            for (int yy = min_y; yy <= max_y; ++yy) {
-                for (int xx = min_x; xx <= max_x; ++xx) {
-                    int curr_idx = yy * in_width + xx;
-
-                    // check new distance
-                    float dist_new = cuDevDist_k(m_gerstner, S, sp_color.L, sp_color.a, sp_color.b, 
-                                            x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
-                                            input_img_lab[curr_idx].b, xx, yy);
-
-                    // Check if the distance is less in order to minimize
-                    if (distance[curr_idx] < 0 || dist_new < distance[curr_idx]) {
-                        distance[curr_idx] = dist_new;
-                        region_map[curr_idx] = out_width*j + i;
-                    }
+    if (pixelX < in_width && pixelY < in_height) {
+        float distance = -1.0f;
+        int min = 0;
+        int min_x = (pixelX - S > 0.0f) ? pixelX - S : 0.0f;
+        int min_y = (pixelY - S > 0.0f) ? pixelY - S : 0.0f;
+        int max_x = (pixelX + S < (in_width - 1)) ? pixelX + S : in_width - 1;
+        int max_y = (pixelY + S < (in_height - 1)) ? pixelY + S : in_height - 1;
+        int curr_idx = pixelY * in_width + pixelY;
+        
+        for (int idx = 0; idx < N_pix; idx++) {
+            int x = (int) round(superPixel_pos[idx].x);
+            int y = (int) round(superPixel_pos[idx].y);
+            if ((min_x <= x && x <= max_x) &&
+                (min_y <= y && y <= max_y)) {
+                LabColor sp_color = average_palette[palette_assign[idx]];
+                float dist_new = cuDevDist_k(m_gerstner, S, sp_color.L, sp_color.a, sp_color.b, 
+                                        x, y, input_img_lab[curr_idx].L, input_img_lab[curr_idx].a, 
+                                        input_img_lab[curr_idx].b, pixelX, pixelY);
+                
+                if (distance < 0 || dist_new < distance) {
+                    distance = dist_new;
+                    min = idx;
                 }
             }
         }
-    }
-
-    delete[] distance;
+        
+        region_map[curr_idx] = min;
     }
 }
 /**
@@ -1389,11 +1358,12 @@ PixImage :: PixImage(unsigned char* input_image, int in_w, int in_h, int out_w, 
 void PixImage :: initSuperPixels(){
     
     // Intialize size of kernal
-    dim3 blockDim(in_width, in_height, 1);
-    dim3 gridDim(1,1);
+    dim3 blockDim(BLOCK_DIM, BLOCK_DIM, 1);
+    dim3 gridDim((in_width + blockDim.x - 1) / blockDim.x,
+            (in_height + blockDim.y - 1) / blockDim.y);
 
 
-    kernelInitSuperPixels<<<1, 10>>>();
+    kernelInitSuperPixels<<<gridDim, blockDim>>>();
     cudaDeviceSynchronize();
 
 }
@@ -1518,10 +1488,11 @@ void PixImage :: initialize(){
     initVariables();
 
     ///*** Create input_img_lab version ***///
-    dim3 blockDim0(1, 1, 1);
-    dim3 gridDim0(1,1);
+    dim3 blockDim(BLOCK_DIM, BLOCK_DIM, 1);
+    dim3 gridDim((in_width + blockDim.x - 1) / blockDim.x,
+            (in_height + blockDim.y - 1) / blockDim.y);
 
-    kernelCreateInputLAB<<<1, 10>>>();
+    kernelCreateInputLAB<<<gridDim, blockDim>>>();
     cudaDeviceSynchronize();
 
     ///*** Initialize Superpixel Values ***///
@@ -1601,10 +1572,11 @@ void PixImage :: runPixelate(){
 
         ///*** Associate to superpixels ***///
 
-        dim3 blockDim0(1, 1, 1);
-        dim3 gridDim0(1,1);
+        dim3 blockDim0(BLOCK_DIM, BLOCK_DIM, 1);
+        dim3 gridDim0((in_width + blockDim0.x - 1) / blockDim0.x,
+            (in_height + blockDim0.y - 1) / blockDim0.y);
 
-        kernelAssociatetoSuperPixels<<<1, 10>>>();
+        kernelAssociatetoSuperPixels<<<gridDim0, blockDim0>>>();
         cudaDeviceSynchronize();
 
         

@@ -22,7 +22,9 @@
 #define kTF 1.0f
 #define kDT .7f
 #define kSubclusterTolerance 1.6f
-#define maxIter 1000
+#define maxIter 188
+
+#define BLOCK_DIM 32
 
 /**
  * @brief position vector data structure
