@@ -782,12 +782,12 @@ __global__ void kernelGetAveragedPalette() {
 
     if (*palette_complete) {
         if (index == 0){
-        memcpy(average_palette, palette_lab, (*palette_size) *sizeof(LabColor));
+            memcpy(average_palette, palette_lab, (*palette_size) *sizeof(LabColor));
         }
         return;
     }
 
-    if (index < *palette_size){
+    if (index < *palette_size >> 1){
         
         PalettePair pair = palette_pairs[index];
         float weight_a = prob_c[pair.a];
