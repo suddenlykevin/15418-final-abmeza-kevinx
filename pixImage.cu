@@ -39,6 +39,9 @@
 #include <algorithm> 
 #include <stack>
 #include <cmath>
+
+#define SCAN_BLOCK_DIM BLOCK_DIM * BLOCK_DIM  // needed by sharedMemExclusiveScan implementation
+#include "exclusiveScan.cu_inl"
 using namespace std;
 
 
@@ -648,12 +651,12 @@ __global__ void kernelInitSuperPixels() {
  */
 __global__ void kernelUpdateSuperPixelMeans() {
     
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-
-    //TODO: RUN ON ONE KERNAL FOR NOW
-    if (index == 0){
+    int threadId = blockDim.x * threadIdx.y + threadIdx.x;
+    int spX = blockIdx.x;
+    int spY = blockIdx.y;
     
     // *** TODO TRANSFER OVER CONSTANTS ***//
+    const int M_pix = cuGlobalConsts.M_pix;
     const int N_pix = cuGlobalConsts.N_pix;
     const int in_width = cuGlobalConsts.in_width;
     const int in_height = cuGlobalConsts.in_height;
@@ -665,61 +668,69 @@ __global__ void kernelUpdateSuperPixelMeans() {
     FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
 
+    int spidx = spX + spY * out_width;
 
-    FloatVec *sp_sums = new FloatVec[N_pix];
-    LabColor *color_sums = new LabColor[N_pix];
-    int *sp_count = new int[N_pix];
+    __shared__ FloatVec sp_sum;
+    __shared__ LabColor color_sum;
+    __shared__ int sp_count;
+    __shared__ int iteration;
 
-    memset(sp_sums, 0, N_pix*sizeof(FloatVec));
-    memset(color_sums, 0, N_pix*sizeof(LabColor));
-    memset(sp_count, 0, N_pix*sizeof(int));
+    if (threadId == 0) {
+        sp_sum.x = 0.f;
+        sp_sum.y = 0.f;
+        color_sum.L = 0.f;
+        color_sum.a = 0.f;
+        color_sum.b = 0.f;
+        sp_count = 0;
+        iteration = 0;
+    }
+
+    __syncthreads();
+
     // Find the mean colors (from input image) for each superpixel
-    for (int j = 0; j < in_height; j++) {
-        for (int i = 0; i < in_width; i++) {
-            int idx = j*in_width + i;
-            int spidx = region_map[idx];
-            sp_count[spidx] ++;
-            sp_sums[spidx].x += i;
-            sp_sums[spidx].y += j;
+    while (iteration * BLOCK_DIM * BLOCK_DIM < M_pix) {
 
-            color_sums[spidx].L += input_img_lab[idx].L;
-            color_sums[spidx].a += input_img_lab[idx].a;
-            color_sums[spidx].b += input_img_lab[idx].b;
+        int idx = threadId + iteration * BLOCK_DIM * BLOCK_DIM;
+
+        if (idx < M_pix && region_map[idx] == spidx) {
+            atomicAdd(&(sp_sum.x), idx % in_width);
+            atomicAdd(&(sp_sum.y), idx / in_width);
+
+            atomicAdd(&color_sum.L, input_img_lab[idx].L);
+            atomicAdd(&color_sum.a, input_img_lab[idx].a);
+            atomicAdd(&color_sum.b, input_img_lab[idx].b);
+
+            atomicAdd(&sp_count, 1);
         }
+        
+        if (threadId == 0) {
+            iteration ++;
+        }
+        __syncthreads();
     }
     
     // Repostion superpixels and update the output color pallete
-    for (int j = 0; j < out_height; j++) {
-        for (int i = 0; i < out_width; i++) {
-            // Index of superpixel
-            int spidx = j*out_width + i;
+    if (threadId == 0) {
 
-            if (sp_count[spidx] == 0) {
-                float dx = (float) in_width/(float) out_width;
-                float dy = (float) in_height/(float) out_height;
-                float x = ((float) i + 0.5f) * dx;
-                float y = ((float) j + 0.5f) * dy;
-                sp_mean_lab[spidx] = input_img_lab[((int) round(y))*in_width + ((int) round(x))];
-                continue;
-            }
+        if (sp_count == 0) {
+            float dx = (float) in_width/(float) out_width;
+            float dy = (float) in_height/(float) out_height;
+            float x = ((float) spX + 0.5f) * dx;
+            float y = ((float) spY + 0.5f) * dy;
+            sp_mean_lab[spidx] = input_img_lab[((int) round(y))*in_width + ((int) round(x))];
+        } else {
 
             // Calculate new position for super pixel
-            float x = sp_sums[spidx].x / sp_count[spidx];
-            float y = sp_sums[spidx].y / sp_count[spidx];
+            float x = sp_sum.x / sp_count;
+            float y = sp_sum.y / sp_count;
             FloatVec newpos = {x, y};
             superPixel_pos[spidx] = newpos;
 
             // Set output_img_lab to new mean value
-            sp_mean_lab[spidx].L = color_sums[spidx].L/sp_count[spidx];
-            sp_mean_lab[spidx].a = color_sums[spidx].a/sp_count[spidx];
-            sp_mean_lab[spidx].b = color_sums[spidx].b/sp_count[spidx];
+            sp_mean_lab[spidx].L = color_sum.L/sp_count;
+            sp_mean_lab[spidx].a = color_sum.a/sp_count;
+            sp_mean_lab[spidx].b = color_sum.b/sp_count;
         }
-    }
-    
-    delete[] sp_sums; 
-    delete[] color_sums;
-    delete[] sp_count;
-
     }
 }
 /**
@@ -1380,11 +1391,11 @@ void PixImage :: initSuperPixels(){
 void PixImage :: updateSuperPixelMeans(){
     
     // Intialize size of kernal
-    dim3 blockDim(in_height,in_width, 1);
-    dim3 gridDim(1,1);
+    dim3 blockDim(BLOCK_DIM,BLOCK_DIM, 1);
+    dim3 gridDim(out_width,out_height);
 
 
-    kernelUpdateSuperPixelMeans<<<1, 10>>>();
+    kernelUpdateSuperPixelMeans<<<gridDim, blockDim>>>();
     cudaDeviceSynchronize();
 }
 
