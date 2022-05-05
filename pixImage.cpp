@@ -13,7 +13,7 @@
 
 // Constants to regulate what we print
 //#define DEBUG     // misc. debug statements
-#define RUN_DEBUG // debug statements that check running progress
+//#define RUN_DEBUG // debug statements that check running progress
 #define TIMING // Calculate and print timing information
 
 
@@ -409,7 +409,7 @@ void PixImage :: runPixelate(){
                 int x = (int) round(center.x);
                 int y = (int) round(center.y);
 
-                LabColor sp_color = palette_lab[palette_assign[idx]];
+                LabColor sp_color = average_palette[palette_assign[idx]];
 
                 // within region
                 for (int yy = min_y; yy <= max_y; ++yy) {
@@ -443,6 +443,8 @@ void PixImage :: runPixelate(){
         #ifdef RUN_DEBUG
         printf("smooth...");
         #endif
+
+        FloatVec new_superPixel_pos[N_pix];
 
         // smooth positions
         for (int j = 0; j < out_height; j++) {
@@ -485,9 +487,11 @@ void PixImage :: runPixelate(){
                     newPos.y = 0.55f*pos.y + 0.45f*sum.y;
                 }
                 // printf("pos: (%f, %f) -> (%f, %f)\n", pos.x, pos.y, newPos.x, newPos.y);
-                superPixel_pos[spidx] = newPos;
+                new_superPixel_pos[spidx] = newPos;
             }
         }
+
+        memcpy(superPixel_pos, new_superPixel_pos, N_pix * sizeof(FloatVec));
     
         // smooth colors
         for(int j = 0; j < out_height; ++j) {
