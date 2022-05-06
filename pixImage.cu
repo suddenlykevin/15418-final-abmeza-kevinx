@@ -106,6 +106,10 @@ __device__ __inline__ int cuDevMin(int item1, int item2) {
     return (item1 >= item2) ? item2 : item1;
 }
 
+// computes closed-form eigendecomposition of real 3x3 hermitian matrix and 
+// returns maximum eigenvalue/vector
+//
+// closed-form solution based on https://hal.archives-ouvertes.fr/hal-01501221/document
 __device__ __inline__ int cuDevMaxEigen3(float *matrix, float *value, LabColor *vector) {
     
     // extract unique values from top triangle
@@ -156,7 +160,10 @@ __device__ __inline__ int cuDevMaxEigen3(float *matrix, float *value, LabColor *
     return 0;
 }
 
-
+/**
+ * @brief Performs the SLIC distance algorithm to assign pixels to superpixels
+ * 
+ */
 __device__ __inline__ float cuDevDist_k(int m, float S, float l_k, float a_k, float b_k, int x_k, int y_k,
            float l_i, float a_i, float b_i, int x_i, int y_i) {
     float d_lab = sqrt(pow(l_k - l_i, 2.f) + pow(a_k - a_i, 2.f) + pow(b_k - b_i, 2.f));
@@ -165,7 +172,7 @@ __device__ __inline__ float cuDevDist_k(int m, float S, float l_k, float a_k, fl
     return d_lab + k * d_xy;
 }
 
-
+//implements a gaussian function with std "sigma" and mean "mean"
 __device__ __inline__ float cuDevGaussian(float x, float sigma, float mean) {
     return exp((x-mean)*(x-mean)/(-2.0f*sigma*sigma))/sqrtf(6.28319*sigma*sigma);
 }
@@ -289,6 +296,16 @@ __device__ __inline__ float cuDevLABtoZ(float L, float a, float b) {
     return cuDevFInv_func(fz);
 }
 
+/**
+ * @brief Converts RGB to CIELAB
+ * 
+ * @param[out] L 
+ * @param[out] a 
+ * @param[out] b 
+ * @param[in] R 
+ * @param[in] G 
+ * @param[in] B 
+ */
 __device__ __inline__ void cuDevrgb2lab(int R, int G, int B, float *L, float *a, float *b) {
     float Rf = cuDevLinearize(R);
     float Gf = cuDevLinearize(G);
@@ -307,6 +324,16 @@ __device__ __inline__ void cuDevrgb2lab(int R, int G, int B, float *L, float *a,
     *b = cuDevXYZtoB(X, Y, Z);
 }
 
+/**
+ * @brief Converts CIELAB to RGB
+ * 
+ * @param[in] L 
+ * @param[in] a 
+ * @param[in] b 
+ * @param[out] R 
+ * @param[out] G 
+ * @param[out] B 
+ */
 __device__ __inline__ void cuDevlab2rgb(float L, float a, float b, unsigned char *R, unsigned char *G, unsigned char *B) {
     float X = cuDevLABtoX(L, a, b);
     float Y = cuDevLABtoY(L, a, b);
@@ -330,8 +357,15 @@ __device__ __inline__ void cuDevlab2rgb(float L, float a, float b, unsigned char
 //*******************  INLINE KERNEL FUNCTIONS ******************//
 //***************************************************************//
 
+/**
+ * @brief Get the Major Axis along which to perturb a given color
+ * 
+ * @param palette_index index of color on palette
+ * @param value value to populate with eigenvalue (variance)
+ * @param vector vector to populate with major axis
+ */
 __device__ __inline__ void getMajorAxis(int palette_index, float *value, LabColor *vector) {
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     int N_pix = cuGlobalConsts.N_pix;
     int out_height = cuGlobalConsts.out_height;
     int out_width = cuGlobalConsts.out_width;
@@ -395,9 +429,14 @@ __device__ __inline__ void getMajorAxis(int palette_index, float *value, LabColo
     *vector = eVec;
 }
 
-
+/**
+ * @brief Push new palette color onto palette stack
+ * 
+ * @param color new color
+ * @param prob probability of color cluster
+ */
 __device__ __inline__ void pushPaletteColor(LabColor color, float prob) {
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     LabColor *palette_lab = cuGlobalConsts.palette_lab;
     float *prob_c = cuGlobalConsts.prob_c;
     int *palette_size = cuGlobalConsts.palette_size;
@@ -407,17 +446,22 @@ __device__ __inline__ void pushPaletteColor(LabColor color, float prob) {
     prob_c[*palette_size] = prob;
     
     (*palette_size) = (*palette_size) + 1; 
-
-    
 }
 
+/**
+ * @brief Push a new pair onto pair stack
+ * 
+ * @param a index of first color in palette
+ * @param b index of second color in palette
+ */
 __device__ __inline__ void pushPalettePair(int a, int b) {
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     int K_colors = cuGlobalConsts.K_colors;
-
+    
     PalettePair *palette_pairs = cuGlobalConsts.palette_pairs;
     int *palette_size = cuGlobalConsts.palette_size;
 
+    // create new pair and push
     PalettePair newPair = {a, b};
     int idx = ((*palette_size) >> 1) - 1;
     if (idx < 0 || idx > K_colors) {
@@ -464,9 +508,12 @@ __device__ __inline__ void inlineGetAveragedPalette() {
     }
 }
 
+/**
+ * @brief Condense palette from pairs once complete
+ */
 __device__ __inline__ void inlineCondensePalette() {
 
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     const int N_pix = cuGlobalConsts.N_pix;
     const int K_colors = cuGlobalConsts.K_colors;
     
@@ -486,8 +533,6 @@ __device__ __inline__ void inlineCondensePalette() {
     float *new_prob_c_if_sp = new float[K_colors * 2 * N_pix];
     int *new_palette_assign = new int[N_pix];
     
-  
-
     // for each pair, condense to average
     for(int j = 0; j < (*palette_size) >> 1; ++j) {
         int index_a = palette_pairs[j].a;
@@ -516,7 +561,7 @@ __device__ __inline__ void inlineCondensePalette() {
     *palette_size = K_colors;
     *palette_complete = true;
 
-    // Delete the stuff
+    // Delete temporary buffers
     delete[] new_palette;
     delete[] new_prob_c;
     delete[] new_prob_c_if_sp ;
@@ -527,10 +572,14 @@ __device__ __inline__ void inlineCondensePalette() {
     #endif
 }
 
- __device__ __inline__ void splitColor(int pair_index) {
+/**
+ * @brief Device function for splitting palette color into its two subclusters
+ * 
+ * @param pair_index index of pair which identifies palette color
+ */
+__device__ __inline__ void splitColor(int pair_index) {
      
-    // *** TODO TRANSFER OVER CONSTANTS ***//
-
+    // retrieve globals
     int N_pix = cuGlobalConsts.N_pix;
 
     int *palette_size = cuGlobalConsts.palette_size;
@@ -539,7 +588,7 @@ __device__ __inline__ void inlineCondensePalette() {
     float *prob_c = cuGlobalConsts.prob_c;
     float *prob_c_if_sp = cuGlobalConsts.prob_c_if_sp;
 
-
+    // get indexes of pair
     int index_a = palette_pairs[pair_index].a;
     int index_b = palette_pairs[pair_index].b;
 
@@ -585,15 +634,17 @@ __device__ __inline__ void inlineCondensePalette() {
  */
 __global__ void kernelCreateInputLAB() {
 
+    // parallel over input pixels
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
     int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
     
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     int in_height = cuGlobalConsts.in_height;
     int in_width = cuGlobalConsts.in_width;
     unsigned char *input_img = cuGlobalConsts.input_img;
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
 
+    // for each pixel, convert to CIELAB space
     if (pixelX < in_width && pixelY < in_height) {
         int idx = pixelX + pixelY * in_width;
         cuDevrgb2lab(input_img[idx*3], input_img[idx*3 + 1], input_img[idx*3 + 2], 
@@ -601,15 +652,17 @@ __global__ void kernelCreateInputLAB() {
     }
 }
 
+
 /**
- * @brief kernal that runs initSuperPixels on Device
+ * @brief Distributes superpixels evenly on input image
  */
 __global__ void kernelInitSuperPixels(FloatVec *sp_sums, LabColor *color_sums, int *sp_count) {
 
+    // parallel over input pixels
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
     int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
 
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     int in_width = cuGlobalConsts.in_width;
     int in_height = cuGlobalConsts.in_height;
     int out_width = cuGlobalConsts.out_width;
@@ -618,7 +671,7 @@ __global__ void kernelInitSuperPixels(FloatVec *sp_sums, LabColor *color_sums, i
     int *region_map = cuGlobalConsts.region_map;
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
 
-    // Get change in length of values
+    // pixels per superpixel in each dimension
     float dx = (float) in_width/(float) out_width;
     float dy = (float) in_height/(float) out_height;
 
@@ -642,6 +695,8 @@ __global__ void kernelInitSuperPixels(FloatVec *sp_sums, LabColor *color_sums, i
 
         // Set Value
         region_map[in_width * pixelY + pixelX] = out_width * y + x;
+
+        // add to totals atomically
         atomicAdd(&(sp_count[out_width * y + x]), 1);
         atomicAdd(&(sp_sums[out_width * y + x].x), pixelX);
         atomicAdd(&(sp_sums[out_width * y + x].y), pixelY);
@@ -653,14 +708,18 @@ __global__ void kernelInitSuperPixels(FloatVec *sp_sums, LabColor *color_sums, i
 }
 
 /**
- * @brief kernal that runs updateSuperPixelMeans on Device
+ * @brief Update superpixel means based on pixels assigned to them
+ * @param sp_sums array to store sum of pixel coordinates assigned to each superpixel
+ * @param color_sums array to store sum of pixel colors assigned to each superpixel
+ * @param sp_count array to store count of pixels assigned to each superpixel
  */
 __global__ void kernelUpdateSuperPixelMeans(FloatVec *sp_sums, LabColor *color_sums, int *sp_count) {
     
+    // parallel over superpixels
     int spY = blockDim.y * blockIdx.y + threadIdx.y;
     int spX = blockDim.x * blockIdx.x + threadIdx.x;
     
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     const int in_width = cuGlobalConsts.in_width;
     const int in_height = cuGlobalConsts.in_height;
     const int out_width = cuGlobalConsts.out_width;
@@ -670,9 +729,11 @@ __global__ void kernelUpdateSuperPixelMeans(FloatVec *sp_sums, LabColor *color_s
     FloatVec *superPixel_pos = cuGlobalConsts.superPixel_pos;
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
     
-    // Repostion superpixels and update the output color pallete
+    // Use totals from parameters to compute mean position and color of a superpixel
     if (spX < out_width && spY < out_height) {
         int spidx = spX + spY * out_width;
+
+        // if no child pixels, reset to initial center value
         if (sp_count[spidx] == 0) {
             float dx = (float) in_width/(float) out_width;
             float dy = (float) in_height/(float) out_height;
@@ -693,79 +754,85 @@ __global__ void kernelUpdateSuperPixelMeans(FloatVec *sp_sums, LabColor *color_s
         }
     }
 }
+
+
 /**
- * @brief kernal that runs initializes palette values on Device
+ * @brief kernal that initializes palette values on device (Serial)
  */
 __global__ void kernelInitPaletteValues() {
     
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-    //TODO: RUN ON ONE KERNAL FOR NOW
+    // only one kernel performs
     if (index == 0){
     
 
-    // *** TODO TRANSFER OVER CONSTANTS ***//
-    int N_pix = cuGlobalConsts.N_pix;
-    float prob_sp = cuGlobalConsts.prob_sp;
+        // retrieve globals
+        int N_pix = cuGlobalConsts.N_pix;
+        float prob_sp = cuGlobalConsts.prob_sp;
 
-    float *T = cuGlobalConsts.T;
-    LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
-    float *prob_c_if_sp = cuGlobalConsts.prob_c_if_sp;
+        float *T = cuGlobalConsts.T;
+        LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
+        float *prob_c_if_sp = cuGlobalConsts.prob_c_if_sp;
 
+        // Find mean of all M_pix color inputs
+        LabColor color_sum = {0.f, 0.f, 0.f};
 
-    // Find mean of all M_pix color inputs
-    LabColor color_sum = {0.f, 0.f, 0.f};
+        //add all colors
+        for (int p = 0; p < N_pix; p++) {
+            color_sum.L += sp_mean_lab[p].L;
+            color_sum.a += sp_mean_lab[p].a;
+            color_sum.b += sp_mean_lab[p].b;
+        }
 
-    //add all colors
-    for (int p = 0; p < N_pix; p++) {
-        color_sum.L += sp_mean_lab[p].L;
-        color_sum.a += sp_mean_lab[p].a;
-        color_sum.b += sp_mean_lab[p].b;
-    }
-    // divide all by M_pix
-    color_sum.L = color_sum.L * prob_sp;
-    color_sum.a = color_sum.a * prob_sp;
-    color_sum.b = color_sum.b * prob_sp;
+        // divide all by M_pix
+        color_sum.L = color_sum.L * prob_sp;
+        color_sum.a = color_sum.a * prob_sp;
+        color_sum.b = color_sum.b * prob_sp;
 
-    #ifdef DEBUG
-    printf("color_init: (%f, %f, %f)\n", color_sum.L, color_sum.a, color_sum.b);
-    #endif
-    // Store color and update prob to any
-    pushPaletteColor(color_sum, 0.5f);
-    
-    for (int idx = 0; idx < N_pix; idx ++) {
-        prob_c_if_sp[idx] = 0.5f;
-    }
-    LabColor majorAxis;
-    float variance;
-    getMajorAxis(0, &variance, &majorAxis);
-    
-    color_sum.L += majorAxis.L * kSubclusterPertubation;
-    color_sum.a += majorAxis.a * kSubclusterPertubation;
-    color_sum.b += majorAxis.b * kSubclusterPertubation;
+        #ifdef DEBUG
+        printf("color_init: (%f, %f, %f)\n", color_sum.L, color_sum.a, color_sum.b);
+        #endif
 
-    pushPaletteColor(color_sum, 0.5f);
-    for (int idx = 0; idx < N_pix; idx ++) {
-        prob_c_if_sp[N_pix + idx] = 0.5f;
-    }
+        // Store color and update prob to any
+        pushPaletteColor(color_sum, 0.5f);
+        
+        // update probabilities
+        for (int idx = 0; idx < N_pix; idx ++) {
+            prob_c_if_sp[idx] = 0.5f;
+        }
 
-    pushPalettePair(0, 1);
+        // perturb and save pairwise subcluster
+        LabColor majorAxis;
+        float variance;
+        getMajorAxis(0, &variance, &majorAxis);
+        
+        color_sum.L += majorAxis.L * kSubclusterPertubation;
+        color_sum.a += majorAxis.a * kSubclusterPertubation;
+        color_sum.b += majorAxis.b * kSubclusterPertubation;
 
-    *T = sqrtf(2*variance) * kT0SafetyFactor;
+        pushPaletteColor(color_sum, 0.5f);
+        for (int idx = 0; idx < N_pix; idx ++) {
+            prob_c_if_sp[N_pix + idx] = 0.5f;
+        }
+
+        pushPalettePair(0, 1);
+
+        // set initial temperature based on variance
+        *T = sqrtf(2*variance) * kT0SafetyFactor;
 
     }
 }
 
 /**
- * @brief Update the average palette
+ * @brief Compute the average of the two subclusters for each palette color
  */
 __global__ void kernelGetAveragedPalette() {
     
+    // parallel over palette colors
     int index = blockIdx.x * blockDim.x + threadIdx.x;
 
-    //TODO: RUN ON ONE KERNAL FOR NOW
-
-    // *** TODO TRANSFER OVER CONSTANTS ***/
+    // retrieve globals
     LabColor *average_palette = cuGlobalConsts.average_palette;
     LabColor *palette_lab = cuGlobalConsts.palette_lab;
     int *palette_size = cuGlobalConsts.palette_size;
@@ -775,7 +842,7 @@ __global__ void kernelGetAveragedPalette() {
 
     bool *palette_complete = cuGlobalConsts.palette_complete;
 
-
+    // if palette is already complete (sealed), simply copy current palette
     if (*palette_complete) {
         if (index == 0){
             memcpy(average_palette, palette_lab, (*palette_size) *sizeof(LabColor));
@@ -783,6 +850,7 @@ __global__ void kernelGetAveragedPalette() {
         return;
     }
 
+    // else, for each color pair, compute average and save to average palette
     if (index < *palette_size >> 1){
         
         PalettePair pair = palette_pairs[index];
@@ -805,15 +873,20 @@ __global__ void kernelGetAveragedPalette() {
     
 }
 
+
 /**
  * @brief Associate Pixels to specific super pixels
+ * @param sp_sums array to store sum of pixel coordinates assigned to each superpixel
+ * @param color_sums array to store sum of pixel colors assigned to each superpixel
+ * @param sp_count array to store count of pixels assigned to each superpixel
  */
 __global__ void kernelAssociatetoSuperPixels(FloatVec *sp_sums, LabColor *color_sums, int *sp_count) {
 
+    // parallel over input pixels
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
     int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
 
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     int N_pix = cuGlobalConsts.N_pix;
     float S = cuGlobalConsts.S;
     int in_height = cuGlobalConsts.in_height;
@@ -825,6 +898,7 @@ __global__ void kernelAssociatetoSuperPixels(FloatVec *sp_sums, LabColor *color_
     LabColor *input_img_lab = cuGlobalConsts.input_img_lab;
     LabColor *average_palette = cuGlobalConsts.average_palette;
 
+    // for each pixel
     if (pixelX < in_width && pixelY < in_height) {
         float distance = -1.0f;
         int min = 0;
@@ -835,6 +909,7 @@ __global__ void kernelAssociatetoSuperPixels(FloatVec *sp_sums, LabColor *color_
         int curr_idx = pixelY * in_width + pixelX;
         LabColor curr_color = input_img_lab[curr_idx];
 
+        // search surrounding 2S x 2S region for "closest" superpixel (by color and distance)
         for (int idx = 0; idx < N_pix; idx++) {
             int x = (int) round(superPixel_pos[idx].x);
             int y = (int) round(superPixel_pos[idx].y);
@@ -852,8 +927,10 @@ __global__ void kernelAssociatetoSuperPixels(FloatVec *sp_sums, LabColor *color_
             }
         }
         
+        // set new superpixel
         region_map[curr_idx] = min;
 
+        // add to superpixel counts
         atomicAdd(&(sp_count[min]), 1);
         atomicAdd(&(sp_sums[min].x), pixelX);
         atomicAdd(&(sp_sums[min].y), pixelY);
@@ -862,15 +939,21 @@ __global__ void kernelAssociatetoSuperPixels(FloatVec *sp_sums, LabColor *color_
         atomicAdd(&(color_sums[min].b), curr_color.b);
     }
 }
+
+
 /**
- * @brief Associate Pixels to specific super pixels
+ * @brief Smooth superpixel positions and colors for better pixelation
+ * (as described by Gerstner et al.)
+ * 
+ * @param new_superPixel_pos shared global buffer for storing new positions
  */
 __global__ void kernelSmoothPositions(FloatVec *new_superPixel_pos) {
     
+    // parallel over superpixels
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
 
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     int out_height = cuGlobalConsts.out_height;
     int out_width = cuGlobalConsts.out_width;
 
@@ -880,10 +963,15 @@ __global__ void kernelSmoothPositions(FloatVec *new_superPixel_pos) {
     LabColor *sp_mean_lab = cuGlobalConsts.sp_mean_lab;
     LabColor *buf_lab = cuGlobalConsts.buf_lab;
 
-    // smooth positions
-    if (i < out_width && j < out_height) {    
+    // smooth positions by moving toward centroid of neighbors
+    if (i < out_width && j < out_height) {  
+
+        // ** SMOOTH POSITIONS ** //
+
         FloatVec sum = {0, 0};
         float count = 0.0f;
+
+        // sum neighbors
         if(i > 0) {
             sum.x += superPixel_pos[j*out_width + i-1].x;
             sum.y += superPixel_pos[j*out_width + i-1].y;
@@ -909,6 +997,7 @@ __global__ void kernelSmoothPositions(FloatVec *new_superPixel_pos) {
         FloatVec pos = superPixel_pos[spidx];
         FloatVec newPos = {0, 0};
 
+        // if against edge, do not move
         if(i == 0 || i == out_width -1) {
             newPos.x = pos.x;
         } else {
@@ -921,20 +1010,22 @@ __global__ void kernelSmoothPositions(FloatVec *new_superPixel_pos) {
         }
         new_superPixel_pos[spidx] = newPos;
 
+        // ** SMOOTH COLORS ** //
+
         //get bounds of 3x3 kernel (make sure we don't go off the image)
         int min_x = cuDevMax(0,i-1);
         int max_x = cuDevMin(out_width-1,i+1);
         int min_y = cuDevMax(0,j-1);
         int max_y = cuDevMin(out_height-1,j+1);
 
-        //Initialize
+        // initialize sums
         LabColor c_sum = {0.f, 0.f, 0.f};
         float weight = 0.f;
 
-        //get current SP color and (grid) position
+        // get current SP color and (grid) position
         LabColor superpixel_color = sp_mean_lab[j*out_width + i];
 
-        //get bilaterally weighted average color of SP neighborhood
+        // get bilaterally weighted average color of SP neighborhood (Gerstner)
         for(int ii = min_x; ii<= max_x; ++ii) {
             for(int jj = min_y; jj<=max_y; ++jj) {
             
@@ -953,22 +1044,28 @@ __global__ void kernelSmoothPositions(FloatVec *new_superPixel_pos) {
             c_sum.b += c_n.b*w_total;
             }
         }
+
         c_sum.L *= 1.0f/weight;
         c_sum.a *= 1.0f/weight;
         c_sum.b *= 1.0f/weight;
         buf_lab[j*out_width + i] = c_sum;
     }
 }
+
+
 /**
  * @brief Associate Pixels to specific super pixels
+ * @param[in] new_prob_c array of prob_c to be populated
+ * @param[out] new_prob_c populated array of new probabilities for each cluster
  */
 __global__ void kernelAssociateToPalette(float *new_prob_c) {
     
+    // each superpixel occupies a block
     int spX = blockIdx.x;
     int spY = blockIdx.y;
     int threadId = threadIdx.x + blockDim.x * threadIdx.y;
 
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     int N_pix = cuGlobalConsts.N_pix;
     int out_width = cuGlobalConsts.out_width;
     float prob_sp = cuGlobalConsts.prob_sp;
@@ -981,12 +1078,15 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
     int *palette_assign = cuGlobalConsts.palette_assign;
     float *prob_c = cuGlobalConsts.prob_c;
 
+    // superpixel index
     int spidx = spY * out_width + spX;
 
+    // arrays used for parallel reduce
     __shared__ volatile float vals[BLOCK_DIM * BLOCK_DIM];
     __shared__ volatile int idxs[BLOCK_DIM * BLOCK_DIM];
+
+    // shared probability data
     __shared__ double *probs;
-    __shared__ volatile int last_block;
     __shared__ double sum_prob;
     __shared__ LabColor sp_color;
 
@@ -1003,9 +1103,10 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
     int best_c = -1;
     float best_norm_val = FLT_MAX;
 
+    // iterating threadId
     int idx = threadId;
 
-    // find local minimums
+    // find local minimum by stepping through color palette
     while (idx < (*palette_size)) {
         // m_s' - c_k TODO: MIGHT NOT WORK?
         LabColor pixDiff;
@@ -1020,9 +1121,11 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
         float pow_val = -1.0f*(norm_val/(*T));
         float prob = prob_c[idx] * exp(pow_val);
         
+        // add to probability sum
         probs[idx] = prob;
         atomicAdd(&sum_prob, prob);
 
+        // set new local minimum
         if (best_c < 0 || norm_val < best_norm_val) {
             best_c = idx;
             best_norm_val = norm_val;
@@ -1036,7 +1139,7 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
     idxs[threadId] = best_c;
     __syncthreads();
 
-    // sweep to reduce
+    // sweep to reduce logarithmically
     for (unsigned int i = (BLOCK_DIM * BLOCK_DIM >> 1); i > 0; i >>= 1) {
         if (threadId < i) {
             if (vals[threadId] > vals[threadId + i]) {
@@ -1047,12 +1150,15 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
         __syncthreads();
     }
 
+    // save minimum
     if (threadId == 0) {
         palette_assign[spidx] = idxs[0];
     }
-
+    
+    // reset iterating threadId
     idx = threadId;
 
+    // step through palette again to update probabilities
     while (idx < (*palette_size)) {
         double p_norm = probs[idx]/sum_prob;
         prob_c_if_sp[idx*(N_pix) + spidx] = p_norm;
@@ -1060,6 +1166,7 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
         idx += BLOCK_DIM * BLOCK_DIM;
     }
 
+    // free probs
     if (threadId == 0) {
         delete[] probs;
     }
@@ -1067,12 +1174,14 @@ __global__ void kernelAssociateToPalette(float *new_prob_c) {
 
 /**
  * @brief Refine the palette
+ * @param palette_error sum of all errors between palette colors and assigned spixels
  */
 __global__ void kernelRefinePalette(float *palette_error) {
     
+    // parallel over colors
     int c = blockIdx.x * blockDim.x + threadIdx.x;
 
-    // *** TODO TRANSFER OVER CONSTANTS ***//
+    // retrieve globals
     int N_pix = cuGlobalConsts.N_pix;
     float prob_sp = cuGlobalConsts.prob_sp;
     
@@ -1082,10 +1191,11 @@ __global__ void kernelRefinePalette(float *palette_error) {
     float *prob_c = cuGlobalConsts.prob_c;
     LabColor *palette_lab = cuGlobalConsts.palette_lab;
 
-    //TODO: DIFF FROM THERE IMPLEMENTATION? CHECK?
+    // for each color,
     if (c < (*palette_size)){
 
         LabColor c_sum = {0.0f,0.0f,0.0f};
+
         // Observe all superpixels to get sum of equation
         for (int p = 0; p < N_pix; p++){
             c_sum.L += sp_mean_lab[p].L * prob_c_if_sp[c*N_pix + p] * prob_sp;
@@ -1093,106 +1203,122 @@ __global__ void kernelRefinePalette(float *palette_error) {
             c_sum.b += sp_mean_lab[p].b * prob_c_if_sp[c*N_pix + p] * prob_sp;
         }
         
+        // if color has probability, refine
         if (prob_c[c] > 0) {
             LabColor last = palette_lab[c];
-            //Update palette color
+
+            // Update palette color
             palette_lab[c].L = c_sum.L/prob_c[c];
             palette_lab[c].a = c_sum.a/prob_c[c];
             palette_lab[c].b = c_sum.b/prob_c[c];
             LabColor curr = palette_lab[c];
 
+            // add to global palette error over all colors
             atomicAdd(palette_error, sqrtf(powf(last.L-curr.L, 2.0f) + powf(last.a-curr.a, 2.0f) + powf(last.b-curr.b, 2.0f)));
         }
     }
 }
 
+/**
+ * @brief Expand the palette if needed (Serial)
+ * @param palette_error sum of all errors between palette colors and assigned spixels
+ */
  __global__ void kernelExpandPalette(float *palette_error) {
     
+    // irrelevant
     int c = blockIdx.x * blockDim.x + threadIdx.x;
 
+    // only one kernel ever computes
     if (c == 0) {
-    // // *** TODO TRANSFER OVER CONSTANTS ***//
-    int K_colors = cuGlobalConsts.K_colors;
-    
-    int *palette_size = cuGlobalConsts.palette_size;
-    LabColor *palette_lab = cuGlobalConsts.palette_lab;
-    PalettePair *palette_pairs = cuGlobalConsts.palette_pairs;
-    bool *palette_complete = cuGlobalConsts.palette_complete;
-
-    bool *converged = cuGlobalConsts.converged;
-    float *T = cuGlobalConsts.T; 
-
-    if ((*palette_error) < kPaletteErrorTolerance) {
-        // check for convergence, lower temperature
-        if ((*T) <= kTF) {
-            (*converged) = true;
-        } else {
-            (*T) = fmaxf((*T)*kDT, kTF);
-        }
+        // retrieve globals
+        int K_colors = cuGlobalConsts.K_colors;
         
-        // if palette is incomplete
-        if (!(*palette_complete)) {
-            int *splits = new int[K_colors];
+        int *palette_size = cuGlobalConsts.palette_size;
+        LabColor *palette_lab = cuGlobalConsts.palette_lab;
+        PalettePair *palette_pairs = cuGlobalConsts.palette_pairs;
+        bool *palette_complete = cuGlobalConsts.palette_complete;
+
+        bool *converged = cuGlobalConsts.converged;
+        float *T = cuGlobalConsts.T; 
+
+        // if palette error under threshold
+        if ((*palette_error) < kPaletteErrorTolerance) {
+
+            // check for convergence, lower temperature
+            if ((*T) <= kTF) {
+                (*converged) = true;
+            } else {
+                (*T) = fmaxf((*T)*kDT, kTF);
+            }
             
-            int curr = 0;
-            for (int i = 0; i < (*palette_size) >> 1; i++) {
-
-                LabColor color_a = palette_lab[palette_pairs[i].a];
-                LabColor color_b = palette_lab[palette_pairs[i].b];
-
-                float error = sqrtf(powf(color_a.L-color_b.L, 2.0f) + 
-                                powf(color_a.a-color_b.a, 2.0f) + 
-                                powf(color_a.b-color_b.b, 2.0f));
-                // determine if split or simply perturb 
-                if (error > kSubclusterTolerance) {
-                    splits[curr] = i;
-                    curr ++;
-                } else {
-                    float value;
-                    LabColor majorAxis;
-                    getMajorAxis(palette_pairs[i].a, &value, &majorAxis);
-                    color_b.L += majorAxis.L * kSubclusterPertubation;
-                    color_b.a += majorAxis.a * kSubclusterPertubation;
-                    color_b.b += majorAxis.b * kSubclusterPertubation;
-
-                    palette_lab[palette_pairs[i].b] = color_b;
-                }
-            }
-
-            // should sort splits by distance here.
-            if (curr > 0) {
-                #ifdef RUN_DEBUG
-                printf("expanding... %d, %d\n", (*palette_size), curr);
-                #endif
-            }
-
-            for (int i = 0; i < curr; i++) {
-                splitColor(splits[i]);
-
-                // if full, seal palette
-                if ((*palette_size) >= 2 * K_colors) {            
-                    #ifdef RUNF_DEBUG
-                    printf("COMPLETE\n");                        
-                    #endif
+            // if palette is incomplete
+            if (!(*palette_complete)) {
+                int *splits = new int[K_colors];
+                
+                int curr = 0;
+                for (int i = 0; i < (*palette_size) >> 1; i++) {
                     
-                    #ifdef RUN_DEBUG
-                    printf("averaging... %d ", *palette_size);
-                    #endif
+                    // check distance between subclusters
+                    LabColor color_a = palette_lab[palette_pairs[i].a];
+                    LabColor color_b = palette_lab[palette_pairs[i].b];
 
-                    // Need to change this at some point
-                    inlineGetAveragedPalette();
+                    float error = sqrtf(powf(color_a.L-color_b.L, 2.0f) + 
+                                    powf(color_a.a-color_b.a, 2.0f) + 
+                                    powf(color_a.b-color_b.b, 2.0f));
 
-                    #ifdef RUN_DEBUG
-                    printf("averaged... ");
-                    #endif
+                    // determine if split or simply perturb again
+                    if (error > kSubclusterTolerance) {
+                        splits[curr] = i;
+                        curr ++;
+                    } else {
+                        float value;
+                        LabColor majorAxis;
+                        getMajorAxis(palette_pairs[i].a, &value, &majorAxis);
+                        color_b.L += majorAxis.L * kSubclusterPertubation;
+                        color_b.a += majorAxis.a * kSubclusterPertubation;
+                        color_b.b += majorAxis.b * kSubclusterPertubation;
 
-                    inlineCondensePalette();
-                    break;
+                        palette_lab[palette_pairs[i].b] = color_b;
+                    }
                 }
+
+                // should sort splits by distance here.
+                if (curr > 0) {
+                    #ifdef RUN_DEBUG
+                    printf("expanding... %d, %d\n", (*palette_size), curr);
+                    #endif
+                }
+
+                // for each pair to be split, split until palette full
+                for (int i = 0; i < curr; i++) {
+                    splitColor(splits[i]);
+
+                    // if full, seal palette
+                    if ((*palette_size) >= 2 * K_colors) {            
+                        #ifdef RUNF_DEBUG
+                        printf("COMPLETE\n");                        
+                        #endif
+                        
+                        #ifdef RUN_DEBUG
+                        printf("averaging... %d ", *palette_size);
+                        #endif
+
+                        // Need to change this at some point
+                        inlineGetAveragedPalette();
+
+                        #ifdef RUN_DEBUG
+                        printf("averaged... ");
+                        #endif
+
+                        inlineCondensePalette();
+                        break;
+                    }
+                }
+
+                // free splits
+                delete[] splits;
             }
-            delete[] splits;
         }
-    }
     }
 }
 
@@ -1203,10 +1329,9 @@ __global__ void kernelProcessOutputImage() {
     
     int index = threadIdx.y * blockDim.x + threadIdx.x;
     
-    // image pixel coordinates
+    // parallel over pixels
     int pixelX = blockIdx.x * blockDim.x + threadIdx.x;
     int pixelY = blockIdx.y * blockDim.y + threadIdx.y;
-
 
     __shared__ int out_width;
     __shared__ int out_height ;
@@ -1219,9 +1344,8 @@ __global__ void kernelProcessOutputImage() {
     __shared__ unsigned char  *spoutput_img ;
     __shared__ int *region_map;
     
-    //TODO: RUN ON ONE KERNAL FOR NOW
+    // retrieve globals
     if (index == 0){
-    // *** TODO TRANSFER OVER CONSTANTS ***//
         out_width = cuGlobalConsts.out_width;
         out_height = cuGlobalConsts.out_height;
         in_width = cuGlobalConsts.in_width;
