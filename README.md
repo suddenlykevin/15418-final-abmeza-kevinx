@@ -2,6 +2,9 @@
 # 15-418 Final Project Proposal: Parallel Pixelated Image Abstraction
 Anthony Meza (abmeza), Kevin Xie (kevinx), 15-418 (S22)
 
+# Video Report
+[Link](https://youtu.be/r2LfX8LAQ-4)
+
 # Summary
 We are going to parallelize [Gerstner et al.'s approach](https://gfx.cs.princeton.edu/pubs/Gerstner_2012_PIA/Gerstner_2012_PIA_full.pdf) to the pixelization/downsampling and color quantization of an image while retaining its salient details. The main focus will be recreating and parallelizing each iteration of the image processing algorithm and yielding an image which resembles pixel art.
 
@@ -102,21 +105,21 @@ Our focus at the moment is managing the rounding of values which has been an iss
 
 ## Updated Schedule
 **Week 3**<br>
-- [ ] Complete sequential implementation
-- [ ] Parallelize simple tasks (colorspace conversion, image read/render)
-- [ ] Think about superpixel parallelization
+- [x] Complete sequential implementation
+- [x] Parallelize simple tasks (colorspace conversion, image read/render)
+- [x] Think about superpixel parallelization
 
 **Week 4**<br>
-- [ ] Benchmark sequential implementation (Bridges-2)
-- [ ] Parallelize superpixel segmentation
-- [ ] Begin parallelizing palette refinement and laplacian smoothing
-- [ ] Begin final report
+- [x] Benchmark sequential implementation (GHC)
+- [x] Parallelize superpixel segmentation
+- [x] Begin parallelizing palette refinement and laplacian smoothing
+- [x] Begin final report
 
 **Week 5**<br>
-- [ ] Complete parallelization
-- [ ] Benchmark parallel implementation (Bridges-2)
-- [ ] Complete and submit final report
-- [ ] Prepare presentation
+- [x] Complete parallelization
+- [x] Benchmark parallel implementation (GHC)
+- [x] Complete and submit final report
+- [x] Prepare presentation
 
 ## Poster session
 At our poster session we plan on being able to show a demo of our working project running both sequentially and in parallel to demonstrate the speedup we were able to achieve, and in the process demonstrate what our code is able to accomplish. In addition to this, we will hopefully be able to show some diagrams with statistics of the speed up across a different number of processors. 
